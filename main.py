@@ -55,7 +55,15 @@ class Order(Base):
     items = Column(Text); total = Column(Float); pay = Column(String(30))
     status = Column(String(20), default="Received")
     created = Column(DateTime, default=datetime.utcnow)
-Base.metadata.create_all(engine)
+for _i in range(15):
+    try:
+        Base.metadata.create_all(engine)
+        break
+    except Exception as e:
+        print("DB not ready, retrying...", e)
+        time.sleep(4)
+else:
+    Base.metadata.create_all(engine)
 
 # ---------- OWNER LOGIN ----------
 fails = {}

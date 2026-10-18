@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex">
+<title>Owner – Quick Bite</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+body{background:#121212;color:#fff;padding:14px;min-height:100vh}
+header{background:#e31837;padding:14px;border-radius:12px;margin-bottom:14px;display:flex;justify-content:space-between;align-items:center}
+input{width:100%;padding:13px;border-radius:10px;border:0;margin:10px 0;font-size:16px}
+.b{border:0;border-radius:8px;padding:10px 14px;font-weight:700;color:#fff;cursor:pointer;font-size:13px}
+.card{background:#1e1e1e;border-radius:12px;padding:14px;margin-bottom:12px;border-left:5px solid #006491}.new{border-left-color:#f1c40f}
+.row{display:flex;justify-content:space-between;margin:4px 0}.muted{color:#aaa;font-size:13px}
+.items{background:#2a2a2a;padding:9px;border-radius:8px;font-size:14px;margin:8px 0}
+.acts{display:flex;gap:6px;margin-top:8px}.acts .b{flex:1}
+a{color:#ff6b81}.hide{display:none}
+</style></head><body>
+<div id="login"><header><h2>👑 Owner Login</h2></header><input id="pw" type="password" placeholder="Owner password"><button class="b" style="width:100%;background:#e31837;padding:14px" onclick="doLogin()">Login</button><p id="err" class="muted" style="margin-top:10px"></p></div>
+<div id="app" class="hide"><header><h2>👑 Live Orders</h2><div><button class="b" style="background:#333" onclick="sound=true;beep();this.textContent='🔔 On'">🔔 Sound</button> <button class="b" style="background:#333" onclick="logout()">Logout</button></div></header><div id="list"></div></div>
+<script>
+var tok=sessionStorage.getItem("qb_tok"),seen=null,sound=false,ctx=null;
+function $(i){return document.getElementById(i)}
+function esc(s){return String(s).replace(/[&<>"]/g,function(c){return{"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]})}
+function beep(){try{ctx=ctx||new (window.AudioContext||window.webkitAudioContext)();[0,.25,.5].forEach(function(t){var o=ctx.createOscillator(),g=ctx.createGain();o.connect(g);g.connect(ctx.destination);o.frequency.value=880;g.gain.value=.3;o.start(ctx.currentTime+t);o.stop(ctx.currentTime+t+.15)})}catch(e){}}
+async function doLogin(){var r=await fetch("/api/owner/login",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({password:$("pw").value})});
+ var d=await r.json();if(!r.ok){$("err").textContent=d.detail||"Login nahi hua";return}tok=d.token;sessionStorage.setItem("qb_tok",tok);start()}
+function logout(){sessionStorage.removeItem("qb_tok");location.reload()}
+async function load(){var r=await fetch("/api/owner/orders",{headers:{Authorization:tok}});if(r.status==401){logout();return}
+ var os=await r.json();var ids=os.map(function(o){return o.id});
+ if(seen!==null&&ids.some(function(i){return seen.indexOf(i)<0})&&sound)beep();seen=ids;
+ $("list").innerHTML=os.map(function(o){var t=new Date(o.time).toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit"});
+  return '<div class="card'+(o.status=="Received"?" new":"")+'"><div class="row"><b>#'+o.id+' · '+t+'</b><b>₹'+o.total+'</b></div>'+
+  '<div><b>'+esc(o.name)+'</b> · <a href="tel:'+esc(o.phone)+'">'+esc(o.phone)+'</a></div><div class="muted">📍 '+esc(o.address)+'</div>'+
+  '<div class="items">'+esc(o.items)+'<br><i class="muted">'+esc(o.pay)+'</i></div><div>Status: <b style="color:#f1c40f">'+esc(o.status)+'</b></div>'+
+  '<div class="acts"><button class="b" style="background:#f39c12" onclick="st('+o.id+',\'Preparing\')">Cooking 🍳</button><button class="b" style="background:#3498db" onclick="st('+o.id+',\'On Way\')">On Way 🛵</button><button class="b" style="background:#2ecc71" onclick="st('+o.id+',\'Delivered\')">Done ✅</button><button class="b" style="background:#7f1d1d" onclick="if(confirm(\'Cancel order?\'))st('+o.id+',\'Cancelled\')">✕</button></div></div>'}).join("")||'<div class="card">Abhi koi order nahi.</div>'}
+async function st(id,s){await fetch("/api/owner/status",{method:"POST",headers:{"Content-Type":"application/json",Authorization:tok},body:JSON.stringify({id:id,status:s})});load()}
+function start(){$("login").classList.add("hide");$("app").classList.remove("hide");load();setInterval(load,8000)}
+if(tok)start();
+</script></body></html>

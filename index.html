@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#006491"><link rel="manifest" href="/manifest.json">
+<title>Quick Bite – Order Online</title>
+<style>
+:root{--blue:#006491;--red:#e31837;--bg:#f2f4f7;--card:#fff;--tx:#1c1c1c;--mu:#6b7280;--bd:#e5e7eb}
+@media(prefers-color-scheme:dark){:root{--bg:#10151a;--card:#1b222a;--tx:#f1f5f9;--mu:#94a3b8;--bd:#2d3742}}
+*{box-sizing:border-box;margin:0;padding:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+body{background:var(--bg);color:var(--tx);padding-bottom:96px;min-height:100vh}
+header{background:var(--blue);color:#fff;padding:14px 16px;display:flex;justify-content:space-between;align-items:center;position:sticky;top:0;z-index:20}
+header h1{font-size:20px}.tabs{display:flex;gap:6px}
+.tab{background:rgba(255,255,255,.15);color:#fff;border:0;padding:7px 12px;border-radius:18px;font-size:13px;font-weight:600;cursor:pointer}.tab.on{background:var(--red)}
+.banner{background:linear-gradient(135deg,var(--red),#b3122b);color:#fff;margin:14px;padding:18px;border-radius:14px}
+.banner h2{font-size:20px}.banner p{font-size:13px;opacity:.92;margin-top:4px}
+.chips{display:flex;gap:8px;overflow-x:auto;padding:4px 14px 10px;position:sticky;top:52px;background:var(--bg);z-index:10;scrollbar-width:none}
+.chip{background:var(--card);border:1px solid var(--bd);color:var(--tx);border-radius:20px;padding:7px 16px;font-size:13px;font-weight:600;white-space:nowrap;cursor:pointer}.chip.on{background:var(--blue);border-color:var(--blue);color:#fff}
+main{max-width:640px;margin:auto;padding:0 14px}
+h3.sec{font-size:17px;margin:16px 0 8px;color:var(--blue);border-left:4px solid var(--red);padding-left:8px}
+.item{background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:12px;margin-bottom:10px;display:flex;gap:12px;align-items:center}
+.emo{font-size:34px;width:60px;height:60px;border-radius:12px;background:var(--bg);display:flex;align-items:center;justify-content:center;flex:none}
+.inf{flex:1;min-width:0}.nm{font-weight:700;font-size:15px}.ds{font-size:12px;color:var(--mu);margin:2px 0 4px}.pr{font-weight:700;color:var(--blue)}
+.veg{display:inline-block;width:12px;height:12px;border:1.5px solid #2e9e3e;border-radius:2px;position:relative;margin-right:5px;vertical-align:-1px}
+.veg:after{content:"";position:absolute;inset:2px;border-radius:50%;background:#2e9e3e}.nv{border-color:#b3261e}.nv:after{background:#b3261e}
+.add{background:var(--card);color:var(--red);border:1.5px solid var(--red);border-radius:8px;padding:7px 18px;font-weight:800;font-size:13px;cursor:pointer}
+.step{display:flex;align-items:center;background:var(--red);color:#fff;border-radius:8px;overflow:hidden}
+.step button{background:none;border:0;color:#fff;width:30px;height:32px;font-size:18px;font-weight:800;cursor:pointer}.step span{min-width:22px;text-align:center;font-weight:700}
+.bar{position:fixed;left:0;right:0;bottom:0;background:var(--blue);color:#fff;padding:12px 16px calc(12px + env(safe-area-inset-bottom,0px));display:none;justify-content:space-between;align-items:center;z-index:30;border-radius:16px 16px 0 0}
+.btn{background:var(--red);color:#fff;border:0;border-radius:24px;padding:11px 22px;font-weight:800;font-size:14px;cursor:pointer}.btn.full{width:100%;border-radius:10px;padding:14px;font-size:16px}
+.modal{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:50;display:none;align-items:flex-end;justify-content:center}
+.sheet{background:var(--card);width:100%;max-width:640px;border-radius:20px 20px 0 0;padding:18px;max-height:90vh;overflow:auto}
+.row{display:flex;justify-content:space-between;margin:6px 0;font-size:14px}
+input,select{width:100%;padding:12px;margin:5px 0 10px;border:1.5px solid var(--bd);border-radius:10px;font-size:15px;background:var(--bg);color:var(--tx)}
+.xx{float:right;font-size:22px;cursor:pointer;color:var(--mu)}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:14px;margin-bottom:12px}
+.prog{display:flex;justify-content:space-between;margin:18px 0 6px;position:relative}.prog:before{content:"";position:absolute;left:8%;right:8%;top:19px;height:3px;background:var(--bd)}
+.pst{text-align:center;font-size:11px;width:25%;position:relative;color:var(--mu)}
+.pst i{display:flex;margin:0 auto 6px;width:40px;height:40px;border-radius:50%;background:var(--bd);align-items:center;justify-content:center;font-style:normal;font-size:19px}
+.pst.on{color:var(--tx);font-weight:700}.pst.on i{background:#2e9e3e}
+.badge{display:inline-block;padding:3px 10px;border-radius:12px;font-size:12px;font-weight:700;background:#fde68a;color:#78350f}
+.hide{display:none}
+</style></head><body>
+<header><h1 id="title">🍔 QUICK BITE</h1><div class="tabs"><button class="tab on" id="t-menu" onclick="show('menu')">Menu</button><button class="tab" id="t-track" onclick="show('track')">My Order</button></div></header>
+<main>
+<section id="v-menu"><div class="banner"><h2>Garam Garam, Fast Delivery ⚡</h2><p>Momos • Chowmein • Fries • Chilli Potato</p></div><div class="chips" id="chips"></div><div id="list"><div class="card">Menu load ho raha hai…</div></div></section>
+<section id="v-track" class="hide"><h3 class="sec">Track Your Order</h3><div id="trackBox" class="card">Abhi tak koi order nahi diya.</div></section>
+</main>
+<div class="bar" id="bar"><div><div id="bc" style="font-size:12px;font-weight:700"></div><div style="font-size:18px;font-weight:800">₹<span id="bt">0</span></div></div><button class="btn" onclick="openCo()">View Cart 🛒</button></div>
+<div class="modal" id="co"><div class="sheet"><span class="xx" onclick="closeCo()">✕</span><h3 style="margin-bottom:10px">🛒 Your Cart</h3><div id="sum"></div>
+<hr style="border:0;border-top:1px solid var(--bd);margin:12px 0">
+<input id="nm" placeholder="Your name" autocomplete="name"><input id="ph" type="tel" inputmode="numeric" placeholder="Phone number (10 digits)" autocomplete="tel"><input id="ad" placeholder="Full delivery address" autocomplete="street-address">
+<button class="btn" id="locb" onclick="getLoc()" style="width:100%;border-radius:10px;background:var(--blue);margin-bottom:10px">📍 Meri location bhejo (delivery easy hogi)</button>
+<select id="pay"><option>Cash on Delivery</option><option>Pay Now (UPI)</option></select>
+<button class="btn full" id="pbtn" onclick="place()">Place Order 🚀</button></div></div>
+<script>
+var LAT=null,LNG=null,MENU=[],CATS=[],cat="All",cart={},CFG={fee:30,free_above:299,min:99},timer=null;
+var STEPS=[["Received","📝","Order Placed"],["Preparing","🍳","Preparing"],["On Way","🛵","Out for Delivery"],["Delivered","🎉","Delivered"]];
+function $(i){return document.getElementById(i)}
+function esc(s){return String(s).replace(/[&<>"]/g,function(c){return{"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]})}
+function byId(i){return MENU.filter(function(x){return x.id==i})[0]}
+async function load(){
+ try{var r=await fetch("/api/menu");var d=await r.json();MENU=d.menu;CFG=d;if(!d.upi){var sel=$("pay");for(var k=sel.options.length-1;k>=0;k--)if(sel.options[k].text.indexOf("UPI")>=0)sel.remove(k)}$("title").textContent="🍔 "+d.name.toUpperCase();document.title=d.name+" – Order Online"}
+ catch(e){$("list").innerHTML='<div class="card">Menu load nahi hua. Page refresh karein.</div>';return}
+ CATS=["All"].concat(MENU.map(function(m){return m.c}).filter(function(x,i,a){return a.indexOf(x)==i}));chips();menu();watch()}
+function chips(){$("chips").innerHTML=CATS.map(function(c,i){return '<button class="chip'+(c==cat?" on":"")+'" data-i="'+i+'">'+esc(c)+'</button>'}).join("");
+ document.querySelectorAll(".chip").forEach(function(b){b.onclick=function(){cat=CATS[b.dataset.i];chips();menu()}})}
+function menu(){var cs=cat=="All"?CATS.slice(1):[cat],h="";
+ cs.forEach(function(c){h+='<h3 class="sec">'+esc(c)+'</h3>';MENU.filter(function(m){return m.c==c}).forEach(function(m){var q=cart[m.id]||0;
+  h+='<div class="item"><div class="emo">'+m.e+'</div><div class="inf"><div class="nm"><span class="veg'+(m.v?"":" nv")+'"></span>'+esc(m.n)+'</div><div class="ds">'+esc(m.d)+'</div><div class="pr">₹'+m.p+'</div></div>'+
+  (q?'<div class="step"><button onclick="chg('+m.id+',-1)">−</button><span>'+q+'</span><button onclick="chg('+m.id+',1)">+</button></div>':'<button class="add" onclick="chg('+m.id+',1)">ADD</button>')+'</div>'})});
+ $("list").innerHTML=h}
+function chg(id,d){cart[id]=(cart[id]||0)+d;if(cart[id]<=0)delete cart[id];if(cart[id]>20)cart[id]=20;menu();bar();if($("co").style.display=="flex")openCo()}
+function tot(){var t=0,q=0;for(var i in cart){t+=byId(i).p*cart[i];q+=cart[i]}return{t:t,q:q}}
+function bar(){var s=tot();$("bar").style.display=s.q?"flex":"none";$("bc").textContent=s.q+" ITEM"+(s.q>1?"S":"");$("bt").textContent=s.t}
+function openCo(){var s=tot();if(!s.q){closeCo();return}var h="";
+ for(var i in cart){h+='<div class="row"><span>'+esc(byId(i).n)+'</span><span><b>'+cart[i]+' ×</b> ₹'+byId(i).p+'</span></div>'}
+ var fee=s.t>=CFG.free_above?0:CFG.fee;
+ h+='<div class="row" style="color:var(--mu)"><span>Delivery fee'+(fee?'':' (FREE)')+'</span><span>₹'+fee+'</span></div><div class="row" style="font-size:17px;font-weight:800;color:var(--red)"><span>Total</span><span>₹'+(s.t+fee)+'</span></div>';
+ if(s.t<CFG.min)h+='<div style="color:var(--red);font-size:13px">Minimum order ₹'+CFG.min+' ka hai</div>';
+ $("sum").innerHTML=h;$("co").style.display="flex"}
+function getLoc(){
+ if(!navigator.geolocation){alert("Aapka browser location support nahi karta. Address mein landmark likh dein.");return}
+ $("locb").textContent="Location dhoondh rahe hain…";
+ navigator.geolocation.getCurrentPosition(function(p){LAT=p.coords.latitude;LNG=p.coords.longitude;$("locb").textContent="✅ Location mil gayi";$("locb").style.background="#2e9e3e"},
+ function(){$("locb").textContent="📍 Location nahi mili – address mein landmark likhein"},{enableHighAccuracy:true,timeout:15000})}
+function closeCo(){$("co").style.display="none"}
+function show(v){["menu","track"].forEach(function(x){$("v-"+x).classList.toggle("hide",x!=v);$("t-"+x).classList.toggle("on",x==v)});if(v=="track")watch()}
+async function place(){
+ var n=$("nm").value.trim(),p=$("ph").value.replace(/\D/g,"").slice(-10),a=$("ad").value.trim();
+ if(!n||p.length<10||a.length<8){alert("Naam, 10-digit phone aur poora address bharein.");return}
+ var items=Object.keys(cart).map(function(i){return{id:+i,qty:cart[i]}});
+ $("pbtn").disabled=true;$("pbtn").textContent="Order ja raha hai…";
+ try{var r=await fetch("/api/order",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({name:n,phone:p,address:a,pay:$("pay").value,items:items,lat:LAT,lng:LNG})});
+  var d=await r.json();if(!r.ok)throw new Error(d.detail||"Order nahi hua");
+  localStorage.setItem("qb_order",JSON.stringify({id:d.id,phone:p}));cart={};menu();bar();closeCo();show("track")}
+ catch(e){alert(e.message)}
+ $("pbtn").disabled=false;$("pbtn").textContent="Place Order 🚀"}
+async function claim(id){var s=JSON.parse(localStorage.getItem("qb_order"));await fetch("/api/order/"+id+"/claim?phone="+s.phone,{method:"POST"});watch()}
+function payBox(o){
+ if(o.pay!="Pay Now (UPI)")return "";
+ if(o.pay_status=="Paid")return '<div style="margin-top:12px;padding:12px;border-radius:10px;background:#e8f5e9;color:#1b5e20;font-weight:700">✅ Payment mil gaya, dhanyavaad!</div>';
+ var link="upi://pay?pa="+encodeURIComponent(CFG.upi)+"&pn="+encodeURIComponent(CFG.name)+"&am="+o.total+"&cu=INR&tn="+encodeURIComponent("Order "+o.id);
+ return '<div style="margin-top:12px;padding:14px;border-radius:10px;border:2px dashed var(--red)"><b>₹'+o.total+' ka payment karein</b><br><a class="btn" href="'+link+'" style="display:inline-block;text-decoration:none;margin:10px 0">📲 UPI App se Pay karein</a><div style="font-size:13px">UPI ID: <b>'+esc(CFG.upi)+'</b> (phone par nahi khule to is ID par bhejein)</div>'+
+ (o.pay_status=="Claimed"?'<p style="margin-top:8px;font-size:13px">Restaurant payment check kar raha hai…</p>':'<button class="btn" style="margin-top:10px" onclick="claim('+o.id+')">Maine pay kar diya</button>')+'</div>'}
+function html(o){var idx=Math.max(0,STEPS.map(function(s){return s[0]}).indexOf(o.status));
+ if(o.status=="Cancelled")return '<b>Order #'+o.id+'</b> <span class="badge" style="background:#fecaca;color:#7f1d1d">Cancelled</span><p style="margin-top:8px;font-size:13px">Is order ko restaurant ne cancel kiya hai.</p>';
+ return '<div class="row"><b>Order #'+o.id+'</b><span class="badge">'+esc(o.status)+'</span></div><div style="font-size:13px;color:var(--mu)">'+esc(o.items)+'</div><div class="row" style="margin-top:8px"><span>Total ('+esc(o.pay)+')</span><b>₹'+o.total+'</b></div><div class="prog">'+
+ STEPS.map(function(s,i){return '<div class="pst'+(i<=idx?" on":"")+'"><i>'+s[1]+'</i>'+s[2]+'</div>'}).join("")+'</div>'+payBox(o)}
+async function watch(){clearTimeout(timer);var s=null;try{s=JSON.parse(localStorage.getItem("qb_order"))}catch(e){}
+ if(!s)return;try{var r=await fetch("/api/order/"+s.id+"?phone="+s.phone);if(r.ok){var o=await r.json();$("trackBox").innerHTML=html(o);if(o.status!="Delivered"&&o.status!="Cancelled")timer=setTimeout(watch,8000)}}catch(e){timer=setTimeout(watch,15000)}}
+load();
+</script></body></html>

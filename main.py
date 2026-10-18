@@ -1,11 +1,11 @@
 import os, json, time, hmac, hashlib
 from datetime import datetime
-from typing import List
+from typing import List, Optional
 from fastapi import FastAPI, HTTPException, Header, Request
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
-from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime, Text
+from sqlalchemy import text, create_engine, Column, Integer, String, Float, DateTime, Text
 from sqlalchemy.orm import declarative_base, sessionmaker
 
 # ---------- SETTINGS (yahan badal sakte ho) ----------
@@ -14,6 +14,13 @@ DELIVERY_FEE = int(os.getenv("DELIVERY_FEE", "30"))
 FREE_DELIVERY_ABOVE = int(os.getenv("FREE_DELIVERY_ABOVE", "299"))
 MIN_ORDER = int(os.getenv("MIN_ORDER", "99"))
 OWNER_PASSWORD = os.getenv("OWNER_PASSWORD", "")
+UPI_ID = os.getenv("UPI_ID", "").strip()
+BASE = os.path.dirname(os.path.abspath(__file__))
+def page(name):
+    for p in (os.path.join(BASE, name), os.path.join(BASE, "static", name)):
+        if os.path.exists(p):
+            return p
+    return os.path.join(BASE, "static", name)
 SECRET_KEY = os.getenv("SECRET_KEY", os.urandom(24).hex())
 
 MENU = [
@@ -55,6 +62,8 @@ class Order(Base):
     items = Column(Text); total = Column(Float); pay = Column(String(30))
     status = Column(String(20), default="Received")
     created = Column(DateTime, default=datetime.utcnow)
+    lat = Column(Float); lng = Column(Float)
+    pay_status = Column(String(20), default="COD")
 for _i in range(15):
     try:
         Base.metadata.create_all(engine)
@@ -64,6 +73,12 @@ for _i in range(15):
         time.sleep(4)
 else:
     Base.metadata.create_all(engine)
+for _c, _t in (("lat", "FLOAT"), ("lng", "FLOAT"), ("pay_status", "VARCHAR(20)")):
+    try:
+        with engine.begin() as _cn:
+            _cn.execute(text("ALTER TABLE orders ADD COLUMN " + _c + " " + _t))
+    except Exception:
+        pass
 
 # ---------- OWNER LOGIN ----------
 fails = {}
@@ -86,6 +101,8 @@ class Line(BaseModel):
     qty: int
 class NewOrder(BaseModel):
     name: str; phone: str; address: str; pay: str; items: List[Line]
+    lat: Optional[float] = None
+    lng: Optional[float] = None
 class Login(BaseModel):
     password: str
 class SetStatus(BaseModel):
@@ -93,14 +110,14 @@ class SetStatus(BaseModel):
 
 @app.get("/api/menu")
 def menu():
-    return {"name": RESTAURANT, "menu": MENU, "fee": DELIVERY_FEE, "free_above": FREE_DELIVERY_ABOVE, "min": MIN_ORDER}
+    return {"name": RESTAURANT, "menu": MENU, "fee": DELIVERY_FEE, "free_above": FREE_DELIVERY_ABOVE, "min": MIN_ORDER, "upi": UPI_ID}
 
 @app.post("/api/order")
 def place(o: NewOrder):
     phone = "".join(ch for ch in o.phone if ch.isdigit())[-10:]
     if len(phone) != 10 or not o.name.strip() or len(o.address.strip()) < 8:
         raise HTTPException(400, "Naam, 10-digit phone aur poora address zaroori hai")
-    if o.pay not in ("Cash on Delivery", "UPI on Delivery"):
+    if o.pay not in ("Cash on Delivery", "Pay Now (UPI)") or (o.pay == "Pay Now (UPI)" and not UPI_ID):
         raise HTTPException(400, "Galat payment option")
     prices = {m["id"]: m for m in MENU}
     total, parts = 0, []
@@ -116,7 +133,10 @@ def place(o: NewOrder):
     total += 0 if total >= FREE_DELIVERY_ABOVE else DELIVERY_FEE
     with Session() as s:
         r = Order(name=o.name.strip()[:80], phone=phone, address=o.address.strip()[:300],
-                  items=", ".join(parts), total=total, pay=o.pay)
+                  items=", ".join(parts), total=total, pay=o.pay,
+                  pay_status="COD" if o.pay == "Cash on Delivery" else "Unpaid",
+                  lat=o.lat if o.lat is not None and -90 <= o.lat <= 90 else None,
+                  lng=o.lng if o.lng is not None and -180 <= o.lng <= 180 else None)
         s.add(r); s.commit()
         return {"id": r.id, "total": total}
 
@@ -127,7 +147,28 @@ def track(oid: int, phone: str):
         r = s.get(Order, oid)
         if not r or r.phone != p:
             raise HTTPException(404, "Order nahi mila")
-        return {"id": r.id, "items": r.items, "total": r.total, "pay": r.pay, "status": r.status}
+        return {"id": r.id, "items": r.items, "total": r.total, "pay": r.pay, "status": r.status, "pay_status": r.pay_status}
+
+@app.post("/api/order/{oid}/claim")
+def claim(oid: int, phone: str):
+    p = "".join(ch for ch in phone if ch.isdigit())[-10:]
+    with Session() as s:
+        r = s.get(Order, oid)
+        if not r or r.phone != p:
+            raise HTTPException(404, "Order nahi mila")
+        if r.pay_status == "Unpaid":
+            r.pay_status = "Claimed"; s.commit()
+    return {"ok": True}
+
+@app.post("/api/owner/paid")
+def mark_paid(d: SetStatus, authorization: str = Header(None)):
+    check_token(authorization)
+    with Session() as s:
+        r = s.get(Order, d.id)
+        if not r:
+            raise HTTPException(404, "Order nahi mila")
+        r.pay_status = "Paid"; s.commit()
+    return {"ok": True}
 
 @app.post("/api/owner/login")
 def login(l: Login, request: Request):
@@ -147,8 +188,8 @@ def orders(authorization: str = Header(None)):
     with Session() as s:
         rows = s.query(Order).order_by(Order.id.desc()).limit(100).all()
         return [{"id": r.id, "name": r.name, "phone": r.phone, "address": r.address, "items": r.items,
-                 "total": r.total, "pay": r.pay, "status": r.status,
-                 "time": r.created.isoformat() + "Z"} for r in rows]
+                 "total": r.total, "pay": r.pay, "status": r.status, "pay_status": r.pay_status,
+                 "lat": r.lat, "lng": r.lng, "time": r.created.isoformat() + "Z"} for r in rows]
 
 @app.post("/api/owner/status")
 def set_status(d: SetStatus, authorization: str = Header(None)):
@@ -164,7 +205,7 @@ def set_status(d: SetStatus, authorization: str = Header(None)):
 
 @app.get("/owner")
 def owner_page():
-    return FileResponse("static/owner.html")
+    return FileResponse(page("owner.html"))
 @app.get("/manifest.json")
 def manifest():
     return {"name": RESTAURANT, "short_name": RESTAURANT, "start_url": "/", "display": "standalone",
@@ -173,4 +214,4 @@ def manifest():
 app.mount("/static", StaticFiles(directory="static"), name="static")
 @app.get("/")
 def home():
-    return FileResponse("static/index.html")
+    return FileResponse(page("index.html"))

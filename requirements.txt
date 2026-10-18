@@ -1,4 +1,5 @@
 fastapi
 uvicorn
 sqlalchemy
+psycopg[binary]
 psycopg2-binary

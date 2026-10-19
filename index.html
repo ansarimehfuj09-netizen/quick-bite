@@ -48,7 +48,7 @@ input,select{width:100%;padding:12px;margin:5px 0 10px;border:1.5px solid var(--
 <div class="bar" id="bar"><div><div id="bc" style="font-size:12px;font-weight:700"></div><div style="font-size:18px;font-weight:800">₹<span id="bt">0</span></div></div><button class="btn" onclick="openCo()">View Cart 🛒</button></div>
 <div class="modal" id="co"><div class="sheet"><span class="xx" onclick="closeCo()">✕</span><h3 style="margin-bottom:10px">🛒 Your Cart</h3><div id="sum"></div>
 <hr style="border:0;border-top:1px solid var(--bd);margin:12px 0">
-<input id="nm" placeholder="Your name" autocomplete="name"><input id="ph" type="tel" inputmode="numeric" placeholder="Phone number (10 digits)" autocomplete="tel"><input id="ad" placeholder="Full delivery address" autocomplete="street-address">
+<input id="nm" placeholder="Your name" autocomplete="name"><input id="ph" type="tel" inputmode="numeric" placeholder="Phone number (10 digits)" autocomplete="tel" oninput="phChange()"><div id="otpbox" class="hide" style="margin-bottom:10px"><button class="btn" id="otpb" style="width:100%;border-radius:10px;background:var(--blue)" onclick="sendOtp()">📩 Is number par OTP bhejo</button><div id="otpin" class="hide"><input id="otp" inputmode="numeric" maxlength="6" placeholder="6-digit OTP daalein"><button class="btn" style="width:100%;border-radius:10px" onclick="verifyOtp()">✅ Verify karein</button></div><div id="otpmsg" style="font-size:13px;margin-top:6px"></div></div><div id="otpok" class="hide" style="color:#2e9e3e;font-weight:700;font-size:13px;margin-bottom:8px">✅ Number verified</div><input id="ad" placeholder="Full delivery address" autocomplete="street-address">
 <button class="btn" id="locb" onclick="getLoc()" style="width:100%;border-radius:10px;background:var(--blue);margin-bottom:10px">📍 Meri location bhejo (delivery easy hogi)</button>
 <div style="display:flex;gap:8px"><input id="cp" placeholder="Coupon code (agar hai)" style="text-transform:uppercase"><button class="btn" style="border-radius:10px;margin:5px 0 10px" onclick="applyCoupon()">Apply</button></div><div id="cpmsg" style="font-size:13px;margin-bottom:8px"></div>
 <select id="pay"><option>Cash on Delivery</option><option>Pay Now (UPI)</option></select>
@@ -62,7 +62,7 @@ function byId(i){return MENU.filter(function(x){return x.id==i})[0]}
 async function load(){
  try{var r=await fetch("/api/menu");var d=await r.json();MENU=d.menu;CFG=d;$("bn1").textContent=d.open=="0"?"🔴 Restaurant abhi band hai":(d.banner||"");$("bn2").textContent=d.open=="0"?"Thodi der baad order karein":(d.sub||"");if(!d.upi){var sel=$("pay");for(var k=sel.options.length-1;k>=0;k--)if(sel.options[k].text.indexOf("UPI")>=0)sel.remove(k)}$("title").textContent="🍔 "+d.name.toUpperCase();document.title=d.name+" – Order Online"}
  catch(e){$("list").innerHTML='<div class="card">Menu load nahi hua. Page refresh karein.</div>';return}
- CATS=["All"].concat(MENU.map(function(m){return m.c}).filter(function(x,i,a){return a.indexOf(x)==i}));chips();menu();watch()}
+ CATS=["All"].concat(MENU.map(function(m){return m.c}).filter(function(x,i,a){return a.indexOf(x)==i}));chips();menu();watch();try{var pf=JSON.parse(localStorage.getItem("qb_prof"));if(pf){$("nm").value=pf.n;$("ph").value=pf.p;$("ad").value=pf.a}}catch(e){}phChange()}
 function chips(){$("chips").innerHTML=CATS.map(function(c,i){return '<button class="chip'+(c==cat?" on":"")+'" data-i="'+i+'">'+esc(c)+'</button>'}).join("");
  document.querySelectorAll(".chip").forEach(function(b){b.onclick=function(){cat=CATS[b.dataset.i];chips();menu()}})}
 function ctl(key,a){var q=cart[key]||0;if(!a)return '<span style="font-size:12px;font-weight:700;color:var(--red)">Out of stock</span>';
@@ -91,6 +91,19 @@ async function openCo(){var s=tot();if(!s.q){closeCo();return}
  if(CFG.open=="0")h+='<div style="color:var(--red);font-size:13px;font-weight:700">Restaurant abhi band hai</div>';
  $("sum").innerHTML=h;$("co").style.display="flex"}
 function applyCoupon(){COUPON=$("cp").value.trim().toUpperCase();$("cpmsg").textContent="";openCo()}
+function tokFor(p){try{var t=JSON.parse(localStorage.getItem("qb_auth"));return t&&t.phone==p?t.token:null}catch(e){return null}}
+function ph10(){return $("ph").value.replace(/\D/g,"").slice(-10)}
+function phChange(){if(!CFG.otp)return;var p=ph10(),v=p.length==10&&tokFor(p);$("otpbox").classList.toggle("hide",p.length<10||!!v);$("otpok").classList.toggle("hide",!v);if(p.length<10){$("otpin").classList.add("hide");$("otpmsg").textContent=""}}
+async function sendOtp(){var p=ph10();if(p.length<10){alert("Pehle 10-digit phone number daalein");return}
+ $("otpb").disabled=true;$("otpmsg").style.color="var(--mu)";$("otpmsg").textContent="OTP bhej rahe hain…";
+ try{var r=await fetch("/api/otp/send",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({phone:p})});var d=await r.json();
+  if(!r.ok)throw new Error(d.detail||"OTP nahi gaya");$("otpin").classList.remove("hide");$("otpmsg").textContent="OTP SMS se aa raha hai, 5 minute mein valid hai."}
+ catch(e){$("otpmsg").style.color="var(--red)";$("otpmsg").textContent=e.message}
+ $("otpb").disabled=false;$("otpb").textContent="📩 OTP dobara bhejo"}
+async function verifyOtp(){var p=ph10(),c=$("otp").value.trim();if(c.length<6){alert("6-digit OTP daalein");return}
+ try{var r=await fetch("/api/otp/verify",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({phone:p,code:c})});var d=await r.json();
+  if(!r.ok)throw new Error(d.detail||"OTP galat hai");localStorage.setItem("qb_auth",JSON.stringify({phone:p,token:d.token}));$("otp").value="";phChange()}
+ catch(e){$("otpmsg").style.color="var(--red)";$("otpmsg").textContent=e.message}}
 function getLoc(){
  if(!navigator.geolocation){alert("Aapka browser location support nahi karta. Address mein landmark likh dein.");return}
  $("locb").textContent="Location dhoondh rahe hain…";
@@ -102,11 +115,12 @@ async function place(){
  if(CFG.open=="0"){alert("Restaurant abhi band hai.");return}
  var n=$("nm").value.trim(),p=$("ph").value.replace(/\D/g,"").slice(-10),a=$("ad").value.trim();
  if(!n||p.length<10||a.length<8){alert("Naam, 10-digit phone aur poora address bharein.");return}
+ if(CFG.otp&&!tokFor(p)){alert("Pehle phone number par OTP bhejkar verify karein.");phChange();return}
  var items=Object.keys(cart).map(function(i){var a=i.split("_");return{id:+a[0],qty:cart[i],v:a.length>1?+a[1]:null}});
  $("pbtn").disabled=true;$("pbtn").textContent="Order ja raha hai…";
- try{var r=await fetch("/api/order",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({name:n,phone:p,address:a,pay:$("pay").value,items:items,lat:LAT,lng:LNG,coupon:COUPON})});
+ try{var r=await fetch("/api/order",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({name:n,phone:p,address:a,pay:$("pay").value,items:items,lat:LAT,lng:LNG,coupon:COUPON,token:tokFor(p)})});
   var d=await r.json();if(!r.ok)throw new Error(d.detail||"Order nahi hua");
-  localStorage.setItem("qb_order",JSON.stringify({id:d.id,phone:p}));cart={};COUPON="";DISC=0;$("cp").value="";$("cpmsg").textContent="";menu();bar();closeCo();show("track")}
+  localStorage.setItem("qb_prof",JSON.stringify({n:n,p:p,a:a}));localStorage.setItem("qb_order",JSON.stringify({id:d.id,phone:p}));cart={};COUPON="";DISC=0;$("cp").value="";$("cpmsg").textContent="";menu();bar();closeCo();show("track")}
  catch(e){alert(e.message)}
  $("pbtn").disabled=false;$("pbtn").textContent="Place Order 🚀"}
 async function claim(id){var s=JSON.parse(localStorage.getItem("qb_order"));await fetch("/api/order/"+id+"/claim?phone="+s.phone,{method:"POST"});watch()}

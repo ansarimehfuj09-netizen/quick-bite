@@ -1,4 +1,4 @@
-import os, json, time, hmac, hashlib
+import os, json, time, hmac, hashlib, secrets, urllib.request, urllib.parse
 from datetime import datetime
 from typing import List, Optional
 from fastapi import FastAPI, HTTPException, Header, Request
@@ -15,6 +15,7 @@ FREE_DELIVERY_ABOVE = int(os.getenv("FREE_DELIVERY_ABOVE", "299"))
 MIN_ORDER = int(os.getenv("MIN_ORDER", "99"))
 OWNER_PASSWORD = os.getenv("OWNER_PASSWORD", "")
 UPI_ID = os.getenv("UPI_ID", "").strip()
+FAST2SMS_KEY = os.getenv("FAST2SMS_KEY", "").strip()
 SECRET_KEY = os.getenv("SECRET_KEY", os.urandom(24).hex())
 BASE = os.path.dirname(os.path.abspath(__file__))
 def page(name):
@@ -83,6 +84,12 @@ class Coupon(Base):
     code = Column(String(30), unique=True); kind = Column(String(10)); value = Column(Float)
     min_order = Column(Float, default=0); active = Column(Integer, default=1)
 
+class Otp(Base):
+    __tablename__ = "otps"
+    phone = Column(String(15), primary_key=True)
+    code_hash = Column(String(80)); exp = Column(Float); tries = Column(Integer, default=0)
+    sent = Column(Integer, default=0); win = Column(Float, default=0)
+
 class Setting(Base):
     __tablename__ = "settings"
     k = Column(String(40), primary_key=True); v = Column(Text)
@@ -141,6 +148,24 @@ def check_token(tok):
     except Exception:
         raise HTTPException(401, "Login required")
 
+def user_token(phone):
+    exp = str(int(time.time()) + 30 * 24 * 3600)
+    return phone + "." + exp + "." + hmac.new(SECRET_KEY.encode(), (phone + "." + exp).encode(), hashlib.sha256).hexdigest()
+def user_token_ok(tok, phone):
+    try:
+        p, exp, sig = (tok or "").split(".")
+        good = hmac.new(SECRET_KEY.encode(), (p + "." + exp).encode(), hashlib.sha256).hexdigest()
+        return p == phone and hmac.compare_digest(sig, good) and int(exp) > time.time()
+    except Exception:
+        return False
+def otp_hash(phone, code):
+    return hmac.new(SECRET_KEY.encode(), (phone + ":" + code).encode(), hashlib.sha256).hexdigest()
+def send_sms_otp(phone, code):
+    q = urllib.parse.urlencode({"authorization": FAST2SMS_KEY, "route": "otp", "variables_values": code, "numbers": phone})
+    req = urllib.request.Request("https://www.fast2sms.com/dev/bulkV2?" + q, headers={"cache-control": "no-cache"})
+    with urllib.request.urlopen(req, timeout=15) as r:
+        return bool(json.loads(r.read().decode()).get("return"))
+
 app = FastAPI(title=RESTAURANT)
 
 class Line(BaseModel):
@@ -152,6 +177,11 @@ class NewOrder(BaseModel):
     lat: Optional[float] = None
     lng: Optional[float] = None
     coupon: Optional[str] = None
+    token: Optional[str] = None
+class OtpSend(BaseModel):
+    phone: str
+class OtpVerify(BaseModel):
+    phone: str; code: str
 class Login(BaseModel):
     password: str
 class SetStatus(BaseModel):
@@ -190,7 +220,7 @@ def menu():
         S = get_settings(s)
         dishes = s.query(Dish).order_by(Dish.id).all()
         return {"name": S["name"], "banner": S["banner"], "sub": S["sub"], "open": S["open"],
-                "fee": num(S["fee"]), "free_above": num(S["free_above"]), "min": num(S["min"]), "upi": S["upi"],
+                "fee": num(S["fee"]), "free_above": num(S["free_above"]), "min": num(S["min"]), "upi": S["upi"], "otp": bool(FAST2SMS_KEY),
                 "menu": [{"id": d.id, "n": d.name, "c": d.cat, "p": money(d.price), "e": d.emoji or "🍽️",
                           "v": d.veg, "d": d.descr or "", "a": d.avail,
                           "vs": json.loads(d.variants or "[]")} for d in dishes]}
@@ -201,11 +231,56 @@ def coupon_check(c: CouponCheck):
         d, label = calc_coupon(s, c.code, c.subtotal)
         return {"discount": d, "label": label}
 
+@app.post("/api/otp/send")
+def otp_send(d: OtpSend):
+    if not FAST2SMS_KEY:
+        raise HTTPException(400, "OTP service chalu nahi hai")
+    phone = "".join(ch for ch in d.phone if ch.isdigit())[-10:]
+    if len(phone) != 10:
+        raise HTTPException(400, "Sahi 10-digit number daalein")
+    now = time.time()
+    with Session() as s:
+        r = s.get(Otp, phone)
+        if not r:
+            r = Otp(phone=phone, sent=0, win=now, tries=0); s.add(r)
+        if now - (r.win or 0) > 600:
+            r.sent = 0; r.win = now
+        if (r.sent or 0) >= 3:
+            raise HTTPException(429, "Bahut baar OTP maanga. 10 minute baad try karein")
+        code = "%06d" % secrets.randbelow(1000000)
+        try:
+            ok = send_sms_otp(phone, code)
+        except Exception:
+            ok = False
+        if not ok:
+            raise HTTPException(502, "OTP bhej nahi paye. Thodi der baad try karein")
+        r.code_hash = otp_hash(phone, code); r.exp = now + 300; r.tries = 0; r.sent = (r.sent or 0) + 1
+        s.commit()
+    return {"ok": True}
+
+@app.post("/api/otp/verify")
+def otp_verify(d: OtpVerify):
+    phone = "".join(ch for ch in d.phone if ch.isdigit())[-10:]
+    with Session() as s:
+        r = s.get(Otp, phone)
+        if not r or not r.code_hash or (r.exp or 0) < time.time():
+            raise HTTPException(400, "OTP expire ho gaya. Naya OTP mangayein")
+        if (r.tries or 0) >= 5:
+            raise HTTPException(429, "Bahut galat try. Naya OTP mangayein")
+        r.tries = (r.tries or 0) + 1
+        if not hmac.compare_digest(r.code_hash, otp_hash(phone, d.code.strip())):
+            s.commit()
+            raise HTTPException(400, "OTP galat hai")
+        r.code_hash = None; s.commit()
+    return {"token": user_token(phone)}
+
 @app.post("/api/order")
 def place(o: NewOrder):
     phone = "".join(ch for ch in o.phone if ch.isdigit())[-10:]
     if len(phone) != 10 or not o.name.strip() or len(o.address.strip()) < 8:
         raise HTTPException(400, "Naam, 10-digit phone aur poora address zaroori hai")
+    if FAST2SMS_KEY and not user_token_ok(o.token, phone):
+        raise HTTPException(401, "Pehle phone number OTP se verify karein")
     with Session() as s:
         S = get_settings(s)
         if S["open"] != "1":

@@ -3,39 +3,111 @@
 <title>Owner – Quick Bite</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
-body{background:#121212;color:#fff;padding:14px;min-height:100vh}
-header{background:#e31837;padding:14px;border-radius:12px;margin-bottom:14px;display:flex;justify-content:space-between;align-items:center}
-input{width:100%;padding:13px;border-radius:10px;border:0;margin:10px 0;font-size:16px}
-.b{border:0;border-radius:8px;padding:10px 14px;font-weight:700;color:#fff;cursor:pointer;font-size:13px}
+body{background:#121212;color:#fff;padding:14px;min-height:100vh;max-width:760px;margin:auto}
+header{background:#e31837;padding:12px 14px;border-radius:12px;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px}
+input,select,textarea{width:100%;padding:11px;border-radius:9px;border:0;margin:4px 0 10px;font-size:15px;background:#fff;color:#111}
+label{font-size:12px;color:#bbb}
+.b{border:0;border-radius:8px;padding:10px 14px;font-weight:700;color:#fff;cursor:pointer;font-size:13px;background:#333}
+.tabs{display:flex;gap:6px;margin-bottom:12px;overflow-x:auto}.tabs .b{flex:1;white-space:nowrap}.tabs .on{background:#e31837}
 .card{background:#1e1e1e;border-radius:12px;padding:14px;margin-bottom:12px;border-left:5px solid #006491}.new{border-left-color:#f1c40f}
-.row{display:flex;justify-content:space-between;margin:4px 0}.muted{color:#aaa;font-size:13px}
+.row{display:flex;justify-content:space-between;margin:4px 0;gap:8px}.muted{color:#aaa;font-size:13px}
 .items{background:#2a2a2a;padding:9px;border-radius:8px;font-size:14px;margin:8px 0}
 .acts{display:flex;gap:6px;margin-top:8px}.acts .b{flex:1}
 a{color:#ff6b81}.hide{display:none}
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.off{opacity:.5}
 </style></head><body>
 <div id="login"><header><h2>👑 Owner Login</h2></header><input id="pw" type="password" placeholder="Owner password"><button class="b" style="width:100%;background:#e31837;padding:14px" onclick="doLogin()">Login</button><p id="err" class="muted" style="margin-top:10px"></p></div>
-<div id="app" class="hide"><header><h2>👑 Live Orders</h2><div><button class="b" style="background:#333" onclick="sound=true;beep();this.textContent='🔔 On'">🔔 Sound</button> <button class="b" style="background:#333" onclick="logout()">Logout</button></div></header><div id="list"></div></div>
+
+<div id="app" class="hide">
+<header><h2>👑 Owner Panel</h2><div><button class="b" onclick="sound=true;beep();this.textContent='🔔 On'">🔔 Sound</button> <button class="b" onclick="logout()">Logout</button></div></header>
+<div class="tabs"><button class="b on" id="tb-orders" onclick="tab('orders')">📋 Orders</button><button class="b" id="tb-menu" onclick="tab('menu')">🍔 Menu</button><button class="b" id="tb-offers" onclick="tab('offers')">🎁 Offers</button><button class="b" id="tb-settings" onclick="tab('settings')">⚙️ Settings</button></div>
+
+<section id="p-orders"><div id="list"></div></section>
+
+<section id="p-menu" class="hide">
+<div class="card" style="border-left-color:#2ecc71"><b id="dfTitle">➕ Nayi Dish Add Karein</b>
+<input type="hidden" id="dfId">
+<label>Dish ka naam</label><input id="dfName" placeholder="Jaise: Cheese Momos (8 pcs)">
+<div class="g2"><div><label>Category</label><input id="dfCat" list="cats" placeholder="Momos / Chowmein / Drinks"><datalist id="cats"></datalist></div><div><label>Price (₹)</label><input id="dfPrice" type="number" inputmode="numeric" placeholder="100"></div></div>
+<label>Chhota description</label><input id="dfDesc" placeholder="Kya khaas hai is dish mein">
+<div class="g2"><div><label>Emoji (photo ki jagah)</label><input id="dfEmoji" placeholder="🥟"></div><div><label>Type</label><select id="dfVeg"><option value="1">🟢 Veg</option><option value="0">🔴 Non-Veg</option></select></div></div>
+<div class="acts"><button class="b" style="background:#2ecc71" onclick="saveDish()">💾 Save Dish</button><button class="b" onclick="resetDish()">Clear</button></div></div>
+<div id="dishes"></div></section>
+
+<section id="p-offers" class="hide">
+<div class="card" style="border-left-color:#2ecc71"><b>🎁 Naya Coupon / Offer Banayein</b>
+<label>Coupon code (customer yahi likhega)</label><input id="cpCode" placeholder="WELCOME10" style="text-transform:uppercase">
+<div class="g2"><div><label>Type</label><select id="cpKind"><option value="percent">Percent % off</option><option value="flat">Flat ₹ off</option></select></div><div><label>Kitna off (% ya ₹)</label><input id="cpVal" type="number" inputmode="numeric" placeholder="10"></div></div>
+<label>Minimum order (₹, 0 = koi limit nahi)</label><input id="cpMin" type="number" inputmode="numeric" placeholder="0">
+<button class="b" style="background:#2ecc71;width:100%" onclick="addCoupon()">➕ Coupon Banao</button></div>
+<div id="coupons"></div></section>
+
+<section id="p-settings" class="hide"><div class="card" style="border-left-color:#f1c40f">
+<label>Restaurant ka naam</label><input id="sName">
+<label>Top banner (bada text)</label><input id="sBanner" placeholder="Aaj ka offer: 10% off!">
+<label>Banner ki neeche wali line</label><input id="sSub">
+<div class="g2"><div><label>Delivery charge (₹)</label><input id="sFee" type="number" inputmode="numeric"></div><div><label>Free delivery kitne se upar (₹)</label><input id="sFree" type="number" inputmode="numeric"></div></div>
+<label>Minimum order (₹)</label><input id="sMin" type="number" inputmode="numeric">
+<label>Aapki UPI ID (Pay Now ke liye)</label><input id="sUpi" placeholder="9876543210@ybl">
+<label>Restaurant abhi</label><select id="sOpen"><option value="1">🟢 Open – orders le rahe hain</option><option value="0">🔴 Band – orders nahi</option></select>
+<button class="b" style="background:#f1c40f;color:#111;width:100%" onclick="saveSettings()">💾 Settings Save Karein</button></div></section>
+</div>
+
 <script>
-var tok=sessionStorage.getItem("qb_tok"),seen=null,sound=false,ctx=null;
+var tok=sessionStorage.getItem("qb_tok"),seen=null,sound=false,ctx=null,DISHES=[],COUPONS=[],curTab="orders";
 function $(i){return document.getElementById(i)}
-function esc(s){return String(s).replace(/[&<>"]/g,function(c){return{"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]})}
+function esc(s){return String(s==null?"":s).replace(/[&<>"]/g,function(c){return{"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]})}
 function beep(){try{ctx=ctx||new (window.AudioContext||window.webkitAudioContext)();[0,.25,.5].forEach(function(t){var o=ctx.createOscillator(),g=ctx.createGain();o.connect(g);g.connect(ctx.destination);o.frequency.value=880;g.gain.value=.3;o.start(ctx.currentTime+t);o.stop(ctx.currentTime+t+.15)})}catch(e){}}
+async function api(p,b){var r=await fetch(p,{method:b?"POST":"GET",headers:{"Content-Type":"application/json",Authorization:tok},body:b?JSON.stringify(b):undefined});
+ if(r.status==401){logout();throw 0}var d=await r.json();if(!r.ok){alert(d.detail||"Kuch gadbad hui");throw 0}return d}
 async function doLogin(){var r=await fetch("/api/owner/login",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({password:$("pw").value})});
  var d=await r.json();if(!r.ok){$("err").textContent=d.detail||"Login nahi hua";return}tok=d.token;sessionStorage.setItem("qb_tok",tok);start()}
+function logout(){sessionStorage.removeItem("qb_tok");location.reload()}
+function tab(t){curTab=t;["orders","menu","offers","settings"].forEach(function(x){$("p-"+x).classList.toggle("hide",x!=t);$("tb-"+x).classList.toggle("on",x==t)});
+ if(t=="menu")loadDishes();if(t=="offers")loadCoupons();if(t=="settings")loadSettings();if(t=="orders")load()}
+
+/* ---------- ORDERS ---------- */
 function mapUrl(o){return o.lat!=null&&o.lng!=null?"https://www.google.com/maps?q="+o.lat+","+o.lng:"https://www.google.com/maps/search/?api=1&query="+encodeURIComponent(o.address)}
 function payTag(o){return o.pay=="Pay Now (UPI)"?(o.pay_status=="Paid"?" · ✅ PAID":o.pay_status=="Claimed"?" · ⏳ Customer ne bola pay kiya, check karo":" · ❌ UNPAID"):" · Delivery par cash lena"}
 function payBtn(o){return o.pay=="Pay Now (UPI)"&&o.pay_status!="Paid"?'<button class="b" style="background:#16a34a;width:100%;margin-top:8px" onclick="paid('+o.id+')">💰 Payment mil gaya</button>':''}
-async function paid(id){await fetch("/api/owner/paid",{method:"POST",headers:{"Content-Type":"application/json",Authorization:tok},body:JSON.stringify({id:id,status:"x"})});load()}
-function logout(){sessionStorage.removeItem("qb_tok");location.reload()}
-async function load(){var r=await fetch("/api/owner/orders",{headers:{Authorization:tok}});if(r.status==401){logout();return}
- var os=await r.json();var ids=os.map(function(o){return o.id});
+async function paid(id){await api("/api/owner/paid",{id:id,status:"x"});load()}
+async function load(){var os=await api("/api/owner/orders");var ids=os.map(function(o){return o.id});
  if(seen!==null&&ids.some(function(i){return seen.indexOf(i)<0})&&sound)beep();seen=ids;
  $("list").innerHTML=os.map(function(o){var t=new Date(o.time).toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit"});
   return '<div class="card'+(o.status=="Received"?" new":"")+'"><div class="row"><b>#'+o.id+' · '+t+'</b><b>₹'+o.total+'</b></div>'+
   '<div><b>'+esc(o.name)+'</b> · <a href="tel:'+esc(o.phone)+'">'+esc(o.phone)+'</a></div><div class="muted">📍 '+esc(o.address)+'</div><div style="margin:6px 0"><a href="'+mapUrl(o)+'" target="_blank">🗺️ Google Maps mein kholo</a></div>'+
-  '<div class="items">'+esc(o.items)+'<br><i class="muted">'+esc(o.pay)+payTag(o)+'</i></div><div>Status: <b style="color:#f1c40f">'+esc(o.status)+'</b></div>'+
+  '<div class="items">'+esc(o.items)+(o.coupon?'<br><span style="color:#2ecc71">🎁 '+esc(o.coupon)+' (−₹'+(o.discount||0)+')</span>':'')+'<br><i class="muted">'+esc(o.pay)+payTag(o)+'</i></div><div>Status: <b style="color:#f1c40f">'+esc(o.status)+'</b></div>'+
   payBtn(o)+'<div class="acts"><button class="b" style="background:#f39c12" onclick="st('+o.id+',\'Preparing\')">Cooking 🍳</button><button class="b" style="background:#3498db" onclick="st('+o.id+',\'On Way\')">On Way 🛵</button><button class="b" style="background:#2ecc71" onclick="st('+o.id+',\'Delivered\')">Done ✅</button><button class="b" style="background:#7f1d1d" onclick="if(confirm(\'Cancel order?\'))st('+o.id+',\'Cancelled\')">✕</button></div></div>'}).join("")||'<div class="card">Abhi koi order nahi.</div>'}
-async function st(id,s){await fetch("/api/owner/status",{method:"POST",headers:{"Content-Type":"application/json",Authorization:tok},body:JSON.stringify({id:id,status:s})});load()}
-function start(){$("login").classList.add("hide");$("app").classList.remove("hide");load();setInterval(load,8000)}
+async function st(id,s){await api("/api/owner/status",{id:id,status:s});load()}
+
+/* ---------- MENU ---------- */
+async function loadDishes(){DISHES=await api("/api/owner/dishes");
+ var cats=DISHES.map(function(d){return d.cat}).filter(function(x,i,a){return a.indexOf(x)==i});
+ $("cats").innerHTML=cats.map(function(c){return '<option value="'+esc(c)+'">'}).join("");
+ var h="";cats.forEach(function(c){h+='<h3 style="margin:14px 0 8px;color:#7cc4e8">'+esc(c)+'</h3>';
+  DISHES.forEach(function(d,i){if(d.cat!=c)return;
+   h+='<div class="card'+(d.avail?'':' off')+'"><div class="row"><b>'+esc(d.emoji)+' '+esc(d.name)+'</b><b>₹'+d.price+'</b></div><div class="muted">'+(d.veg?'🟢 Veg':'🔴 Non-veg')+' · '+esc(d.descr)+'</div>'+
+   '<div class="acts"><button class="b" style="background:'+(d.avail?'#16a34a':'#b45309')+'" onclick="toggleDish('+d.id+')">'+(d.avail?'✅ Available':'⛔ Out of stock')+'</button><button class="b" style="background:#3498db" onclick="editDish('+i+')">✏️ Edit</button><button class="b" style="background:#7f1d1d" onclick="delDish('+d.id+')">🗑️</button></div></div>'})});
+ $("dishes").innerHTML=h||'<div class="card">Abhi koi dish nahi. Upar se add karein.</div>'}
+function resetDish(){["dfId","dfName","dfCat","dfPrice","dfDesc","dfEmoji"].forEach(function(i){$(i).value=""});$("dfVeg").value="1";$("dfTitle").textContent="➕ Nayi Dish Add Karein"}
+function editDish(i){var d=DISHES[i];$("dfId").value=d.id;$("dfName").value=d.name;$("dfCat").value=d.cat;$("dfPrice").value=d.price;$("dfDesc").value=d.descr;$("dfEmoji").value=d.emoji;$("dfVeg").value=d.veg;$("dfTitle").textContent="✏️ Dish Edit: "+d.name;window.scrollTo({top:0,behavior:"smooth"})}
+async function saveDish(){var id=$("dfId").value;await api("/api/owner/dish",{id:id?+id:null,name:$("dfName").value,cat:$("dfCat").value,price:+$("dfPrice").value||0,descr:$("dfDesc").value,emoji:$("dfEmoji").value||"🍽️",veg:+$("dfVeg").value});resetDish();loadDishes()}
+async function toggleDish(id){await api("/api/owner/dish/toggle",{id:id});loadDishes()}
+async function delDish(id){if(confirm("Ye dish hamesha ke liye hata dein?")){await api("/api/owner/dish/delete",{id:id});loadDishes()}}
+
+/* ---------- OFFERS ---------- */
+async function loadCoupons(){COUPONS=await api("/api/owner/coupons");
+ $("coupons").innerHTML=COUPONS.map(function(c){return '<div class="card'+(c.active?'':' off')+'"><div class="row"><b style="font-size:17px">🎁 '+esc(c.code)+'</b><b>'+(c.kind=="percent"?c.value+'% off':'₹'+c.value+' off')+'</b></div><div class="muted">Minimum order: ₹'+c.min_order+'</div>'+
+  '<div class="acts"><button class="b" style="background:'+(c.active?'#16a34a':'#b45309')+'" onclick="togCoupon('+c.id+')">'+(c.active?'✅ Chalu':'⏸️ Band')+'</button><button class="b" style="background:#7f1d1d" onclick="delCoupon('+c.id+')">🗑️ Delete</button></div></div>'}).join("")||'<div class="card">Abhi koi coupon nahi.</div>'}
+async function addCoupon(){await api("/api/owner/coupon",{code:$("cpCode").value,kind:$("cpKind").value,value:+$("cpVal").value||0,min_order:+$("cpMin").value||0});$("cpCode").value="";$("cpVal").value="";$("cpMin").value="";loadCoupons()}
+async function togCoupon(id){await api("/api/owner/coupon/toggle",{id:id});loadCoupons()}
+async function delCoupon(id){if(confirm("Ye coupon delete karein?")){await api("/api/owner/coupon/delete",{id:id});loadCoupons()}}
+
+/* ---------- SETTINGS ---------- */
+async function loadSettings(){var s=await api("/api/owner/settings");$("sName").value=s.name;$("sBanner").value=s.banner;$("sSub").value=s.sub;$("sFee").value=s.fee;$("sFree").value=s.free_above;$("sMin").value=s.min;$("sUpi").value=s.upi;$("sOpen").value=s.open}
+async function saveSettings(){await api("/api/owner/settings",{name:$("sName").value,banner:$("sBanner").value,sub:$("sSub").value,fee:+$("sFee").value||0,free_above:+$("sFree").value||0,min:+$("sMin").value||0,upi:$("sUpi").value,open:+$("sOpen").value});alert("✅ Settings save ho gayi")}
+
+function start(){$("login").classList.add("hide");$("app").classList.remove("hide");load();setInterval(function(){if(curTab=="orders")load()},8000)}
 if(tok)start();
 </script></body></html>

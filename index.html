@@ -42,7 +42,7 @@ input,select{width:100%;padding:12px;margin:5px 0 10px;border:1.5px solid var(--
 </style></head><body>
 <header><h1 id="title">🍔 QUICK BITE</h1><div class="tabs"><button class="tab on" id="t-menu" onclick="show('menu')">Menu</button><button class="tab" id="t-track" onclick="show('track')">My Order</button></div></header>
 <main>
-<section id="v-menu"><div class="banner"><h2>Garam Garam, Fast Delivery ⚡</h2><p>Momos • Chowmein • Fries • Chilli Potato</p></div><div class="chips" id="chips"></div><div id="list"><div class="card">Menu load ho raha hai…</div></div></section>
+<section id="v-menu"><div class="banner"><h2 id="bn1">Garam Garam, Fast Delivery ⚡</h2><p id="bn2"></p></div><div class="chips" id="chips"></div><div id="list"><div class="card">Menu load ho raha hai…</div></div></section>
 <section id="v-track" class="hide"><h3 class="sec">Track Your Order</h3><div id="trackBox" class="card">Abhi tak koi order nahi diya.</div></section>
 </main>
 <div class="bar" id="bar"><div><div id="bc" style="font-size:12px;font-weight:700"></div><div style="font-size:18px;font-weight:800">₹<span id="bt">0</span></div></div><button class="btn" onclick="openCo()">View Cart 🛒</button></div>
@@ -50,34 +50,43 @@ input,select{width:100%;padding:12px;margin:5px 0 10px;border:1.5px solid var(--
 <hr style="border:0;border-top:1px solid var(--bd);margin:12px 0">
 <input id="nm" placeholder="Your name" autocomplete="name"><input id="ph" type="tel" inputmode="numeric" placeholder="Phone number (10 digits)" autocomplete="tel"><input id="ad" placeholder="Full delivery address" autocomplete="street-address">
 <button class="btn" id="locb" onclick="getLoc()" style="width:100%;border-radius:10px;background:var(--blue);margin-bottom:10px">📍 Meri location bhejo (delivery easy hogi)</button>
+<div style="display:flex;gap:8px"><input id="cp" placeholder="Coupon code (agar hai)" style="text-transform:uppercase"><button class="btn" style="border-radius:10px;margin:5px 0 10px" onclick="applyCoupon()">Apply</button></div><div id="cpmsg" style="font-size:13px;margin-bottom:8px"></div>
 <select id="pay"><option>Cash on Delivery</option><option>Pay Now (UPI)</option></select>
 <button class="btn full" id="pbtn" onclick="place()">Place Order 🚀</button></div></div>
 <script>
-var LAT=null,LNG=null,MENU=[],CATS=[],cat="All",cart={},CFG={fee:30,free_above:299,min:99},timer=null;
+var COUPON="",DISC=0,LAT=null,LNG=null,MENU=[],CATS=[],cat="All",cart={},CFG={fee:30,free_above:299,min:99},timer=null;
 var STEPS=[["Received","📝","Order Placed"],["Preparing","🍳","Preparing"],["On Way","🛵","Out for Delivery"],["Delivered","🎉","Delivered"]];
 function $(i){return document.getElementById(i)}
 function esc(s){return String(s).replace(/[&<>"]/g,function(c){return{"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]})}
 function byId(i){return MENU.filter(function(x){return x.id==i})[0]}
 async function load(){
- try{var r=await fetch("/api/menu");var d=await r.json();MENU=d.menu;CFG=d;if(!d.upi){var sel=$("pay");for(var k=sel.options.length-1;k>=0;k--)if(sel.options[k].text.indexOf("UPI")>=0)sel.remove(k)}$("title").textContent="🍔 "+d.name.toUpperCase();document.title=d.name+" – Order Online"}
+ try{var r=await fetch("/api/menu");var d=await r.json();MENU=d.menu;CFG=d;$("bn1").textContent=d.open=="0"?"🔴 Restaurant abhi band hai":(d.banner||"");$("bn2").textContent=d.open=="0"?"Thodi der baad order karein":(d.sub||"");if(!d.upi){var sel=$("pay");for(var k=sel.options.length-1;k>=0;k--)if(sel.options[k].text.indexOf("UPI")>=0)sel.remove(k)}$("title").textContent="🍔 "+d.name.toUpperCase();document.title=d.name+" – Order Online"}
  catch(e){$("list").innerHTML='<div class="card">Menu load nahi hua. Page refresh karein.</div>';return}
  CATS=["All"].concat(MENU.map(function(m){return m.c}).filter(function(x,i,a){return a.indexOf(x)==i}));chips();menu();watch()}
 function chips(){$("chips").innerHTML=CATS.map(function(c,i){return '<button class="chip'+(c==cat?" on":"")+'" data-i="'+i+'">'+esc(c)+'</button>'}).join("");
  document.querySelectorAll(".chip").forEach(function(b){b.onclick=function(){cat=CATS[b.dataset.i];chips();menu()}})}
 function menu(){var cs=cat=="All"?CATS.slice(1):[cat],h="";
  cs.forEach(function(c){h+='<h3 class="sec">'+esc(c)+'</h3>';MENU.filter(function(m){return m.c==c}).forEach(function(m){var q=cart[m.id]||0;
-  h+='<div class="item"><div class="emo">'+m.e+'</div><div class="inf"><div class="nm"><span class="veg'+(m.v?"":" nv")+'"></span>'+esc(m.n)+'</div><div class="ds">'+esc(m.d)+'</div><div class="pr">₹'+m.p+'</div></div>'+
-  (q?'<div class="step"><button onclick="chg('+m.id+',-1)">−</button><span>'+q+'</span><button onclick="chg('+m.id+',1)">+</button></div>':'<button class="add" onclick="chg('+m.id+',1)">ADD</button>')+'</div>'})});
- $("list").innerHTML=h}
+  h+='<div class="item" style="'+(m.a?'':'opacity:.55')+'"><div class="emo">'+esc(m.e)+'</div><div class="inf"><div class="nm"><span class="veg'+(m.v?"":" nv")+'"></span>'+esc(m.n)+'</div><div class="ds">'+esc(m.d)+'</div><div class="pr">₹'+m.p+'</div></div>'+
+  (m.a?(q?'<div class="step"><button onclick="chg('+m.id+',-1)">−</button><span>'+q+'</span><button onclick="chg('+m.id+',1)">+</button></div>':'<button class="add" onclick="chg('+m.id+',1)">ADD</button>'):'<span style="font-size:12px;font-weight:700;color:var(--red)">Out of stock</span>')+'</div>'})});
+ $("list").innerHTML=h||'<div class="card">Menu abhi khaali hai.</div>'}
 function chg(id,d){cart[id]=(cart[id]||0)+d;if(cart[id]<=0)delete cart[id];if(cart[id]>20)cart[id]=20;menu();bar();if($("co").style.display=="flex")openCo()}
 function tot(){var t=0,q=0;for(var i in cart){t+=byId(i).p*cart[i];q+=cart[i]}return{t:t,q:q}}
 function bar(){var s=tot();$("bar").style.display=s.q?"flex":"none";$("bc").textContent=s.q+" ITEM"+(s.q>1?"S":"");$("bt").textContent=s.t}
-function openCo(){var s=tot();if(!s.q){closeCo();return}var h="";
+async function openCo(){var s=tot();if(!s.q){closeCo();return}
+ DISC=0;
+ if(COUPON){try{var r=await fetch("/api/coupon/check",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({code:COUPON,subtotal:s.t})});var d=await r.json();
+  if(r.ok){DISC=d.discount;$("cpmsg").style.color="#2e9e3e";$("cpmsg").textContent="✅ "+d.label+" lag gaya"}else{COUPON="";$("cpmsg").style.color="var(--red)";$("cpmsg").textContent=d.detail||"Coupon sahi nahi hai"}}catch(e){}}
+ var h="";
  for(var i in cart){h+='<div class="row"><span>'+esc(byId(i).n)+'</span><span><b>'+cart[i]+' ×</b> ₹'+byId(i).p+'</span></div>'}
- var fee=s.t>=CFG.free_above?0:CFG.fee;
- h+='<div class="row" style="color:var(--mu)"><span>Delivery fee'+(fee?'':' (FREE)')+'</span><span>₹'+fee+'</span></div><div class="row" style="font-size:17px;font-weight:800;color:var(--red)"><span>Total</span><span>₹'+(s.t+fee)+'</span></div>';
+ var base=s.t-DISC,fee=base>=CFG.free_above?0:CFG.fee;
+ h+='<div class="row" style="color:var(--mu)"><span>Subtotal</span><span>₹'+s.t+'</span></div>';
+ if(DISC)h+='<div class="row" style="color:#2e9e3e"><span>Discount ('+esc(COUPON)+')</span><span>−₹'+DISC+'</span></div>';
+ h+='<div class="row" style="color:var(--mu)"><span>Delivery fee'+(fee?'':' (FREE)')+'</span><span>₹'+fee+'</span></div><div class="row" style="font-size:17px;font-weight:800;color:var(--red)"><span>Total</span><span>₹'+(base+fee)+'</span></div>';
  if(s.t<CFG.min)h+='<div style="color:var(--red);font-size:13px">Minimum order ₹'+CFG.min+' ka hai</div>';
+ if(CFG.open=="0")h+='<div style="color:var(--red);font-size:13px;font-weight:700">Restaurant abhi band hai</div>';
  $("sum").innerHTML=h;$("co").style.display="flex"}
+function applyCoupon(){COUPON=$("cp").value.trim().toUpperCase();$("cpmsg").textContent="";openCo()}
 function getLoc(){
  if(!navigator.geolocation){alert("Aapka browser location support nahi karta. Address mein landmark likh dein.");return}
  $("locb").textContent="Location dhoondh rahe hain…";
@@ -86,13 +95,14 @@ function getLoc(){
 function closeCo(){$("co").style.display="none"}
 function show(v){["menu","track"].forEach(function(x){$("v-"+x).classList.toggle("hide",x!=v);$("t-"+x).classList.toggle("on",x==v)});if(v=="track")watch()}
 async function place(){
+ if(CFG.open=="0"){alert("Restaurant abhi band hai.");return}
  var n=$("nm").value.trim(),p=$("ph").value.replace(/\D/g,"").slice(-10),a=$("ad").value.trim();
  if(!n||p.length<10||a.length<8){alert("Naam, 10-digit phone aur poora address bharein.");return}
  var items=Object.keys(cart).map(function(i){return{id:+i,qty:cart[i]}});
  $("pbtn").disabled=true;$("pbtn").textContent="Order ja raha hai…";
- try{var r=await fetch("/api/order",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({name:n,phone:p,address:a,pay:$("pay").value,items:items,lat:LAT,lng:LNG})});
+ try{var r=await fetch("/api/order",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({name:n,phone:p,address:a,pay:$("pay").value,items:items,lat:LAT,lng:LNG,coupon:COUPON})});
   var d=await r.json();if(!r.ok)throw new Error(d.detail||"Order nahi hua");
-  localStorage.setItem("qb_order",JSON.stringify({id:d.id,phone:p}));cart={};menu();bar();closeCo();show("track")}
+  localStorage.setItem("qb_order",JSON.stringify({id:d.id,phone:p}));cart={};COUPON="";DISC=0;$("cp").value="";$("cpmsg").textContent="";menu();bar();closeCo();show("track")}
  catch(e){alert(e.message)}
  $("pbtn").disabled=false;$("pbtn").textContent="Place Order 🚀"}
 async function claim(id){var s=JSON.parse(localStorage.getItem("qb_order"));await fetch("/api/order/"+id+"/claim?phone="+s.phone,{method:"POST"});watch()}

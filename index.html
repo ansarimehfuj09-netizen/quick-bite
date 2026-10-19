@@ -65,20 +65,24 @@ async function load(){
  CATS=["All"].concat(MENU.map(function(m){return m.c}).filter(function(x,i,a){return a.indexOf(x)==i}));chips();menu();watch()}
 function chips(){$("chips").innerHTML=CATS.map(function(c,i){return '<button class="chip'+(c==cat?" on":"")+'" data-i="'+i+'">'+esc(c)+'</button>'}).join("");
  document.querySelectorAll(".chip").forEach(function(b){b.onclick=function(){cat=CATS[b.dataset.i];chips();menu()}})}
+function ctl(key,a){var q=cart[key]||0;if(!a)return '<span style="font-size:12px;font-weight:700;color:var(--red)">Out of stock</span>';
+ return q?'<div class="step"><button onclick="chg(\''+key+'\',-1)">−</button><span>'+q+'</span><button onclick="chg(\''+key+'\',1)">+</button></div>':'<button class="add" onclick="chg(\''+key+'\',1)">ADD</button>'}
+function P(k){var a=String(k).split("_"),m=byId(a[0]);if(!m)return null;var v=a.length>1?(m.vs||[])[+a[1]]:null;return{n:m.n+(v?" ("+v.l+")":""),p:v?v.p:m.p}}
 function menu(){var cs=cat=="All"?CATS.slice(1):[cat],h="";
- cs.forEach(function(c){h+='<h3 class="sec">'+esc(c)+'</h3>';MENU.filter(function(m){return m.c==c}).forEach(function(m){var q=cart[m.id]||0;
-  h+='<div class="item" style="'+(m.a?'':'opacity:.55')+'"><div class="emo">'+esc(m.e)+'</div><div class="inf"><div class="nm"><span class="veg'+(m.v?"":" nv")+'"></span>'+esc(m.n)+'</div><div class="ds">'+esc(m.d)+'</div><div class="pr">₹'+m.p+'</div></div>'+
-  (m.a?(q?'<div class="step"><button onclick="chg('+m.id+',-1)">−</button><span>'+q+'</span><button onclick="chg('+m.id+',1)">+</button></div>':'<button class="add" onclick="chg('+m.id+',1)">ADD</button>'):'<span style="font-size:12px;font-weight:700;color:var(--red)">Out of stock</span>')+'</div>'})});
+ cs.forEach(function(c){h+='<h3 class="sec">'+esc(c)+'</h3>';MENU.filter(function(m){return m.c==c}).forEach(function(m){var op=m.a?'':'opacity:.55;',vs=m.vs||[];
+  var top='<div class="emo">'+esc(m.e)+'</div><div class="inf"><div class="nm"><span class="veg'+(m.v?"":" nv")+'"></span>'+esc(m.n)+'</div><div class="ds">'+esc(m.d)+'</div>';
+  if(vs.length){h+='<div class="item" style="flex-wrap:wrap;'+op+'">'+top+'</div><div style="width:100%">'+vs.map(function(v,i){return '<div class="row" style="align-items:center;border-top:1px dashed var(--bd);padding-top:8px;margin-top:8px"><span><b>'+esc(v.l)+'</b> &nbsp;<span class="pr">₹'+v.p+'</span></span>'+ctl(m.id+"_"+i,m.a)+'</div>'}).join("")+'</div></div>'}
+  else{h+='<div class="item" style="'+op+'">'+top+'<div class="pr">₹'+m.p+'</div></div>'+ctl(String(m.id),m.a)+'</div>'}})});
  $("list").innerHTML=h||'<div class="card">Menu abhi khaali hai.</div>'}
 function chg(id,d){cart[id]=(cart[id]||0)+d;if(cart[id]<=0)delete cart[id];if(cart[id]>20)cart[id]=20;menu();bar();if($("co").style.display=="flex")openCo()}
-function tot(){var t=0,q=0;for(var i in cart){t+=byId(i).p*cart[i];q+=cart[i]}return{t:t,q:q}}
+function tot(){var t=0,q=0;for(var i in cart){var x=P(i);if(!x){delete cart[i];continue}t+=x.p*cart[i];q+=cart[i]}return{t:t,q:q}}
 function bar(){var s=tot();$("bar").style.display=s.q?"flex":"none";$("bc").textContent=s.q+" ITEM"+(s.q>1?"S":"");$("bt").textContent=s.t}
 async function openCo(){var s=tot();if(!s.q){closeCo();return}
  DISC=0;
  if(COUPON){try{var r=await fetch("/api/coupon/check",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({code:COUPON,subtotal:s.t})});var d=await r.json();
   if(r.ok){DISC=d.discount;$("cpmsg").style.color="#2e9e3e";$("cpmsg").textContent="✅ "+d.label+" lag gaya"}else{COUPON="";$("cpmsg").style.color="var(--red)";$("cpmsg").textContent=d.detail||"Coupon sahi nahi hai"}}catch(e){}}
  var h="";
- for(var i in cart){h+='<div class="row"><span>'+esc(byId(i).n)+'</span><span><b>'+cart[i]+' ×</b> ₹'+byId(i).p+'</span></div>'}
+ for(var i in cart){var x=P(i);h+='<div class="row"><span>'+esc(x.n)+'</span><span><b>'+cart[i]+' ×</b> ₹'+x.p+'</span></div>'}
  var base=s.t-DISC,fee=base>=CFG.free_above?0:CFG.fee;
  h+='<div class="row" style="color:var(--mu)"><span>Subtotal</span><span>₹'+s.t+'</span></div>';
  if(DISC)h+='<div class="row" style="color:#2e9e3e"><span>Discount ('+esc(COUPON)+')</span><span>−₹'+DISC+'</span></div>';
@@ -98,7 +102,7 @@ async function place(){
  if(CFG.open=="0"){alert("Restaurant abhi band hai.");return}
  var n=$("nm").value.trim(),p=$("ph").value.replace(/\D/g,"").slice(-10),a=$("ad").value.trim();
  if(!n||p.length<10||a.length<8){alert("Naam, 10-digit phone aur poora address bharein.");return}
- var items=Object.keys(cart).map(function(i){return{id:+i,qty:cart[i]}});
+ var items=Object.keys(cart).map(function(i){var a=i.split("_");return{id:+a[0],qty:cart[i],v:a.length>1?+a[1]:null}});
  $("pbtn").disabled=true;$("pbtn").textContent="Order ja raha hai…";
  try{var r=await fetch("/api/order",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({name:n,phone:p,address:a,pay:$("pay").value,items:items,lat:LAT,lng:LNG,coupon:COUPON})});
   var d=await r.json();if(!r.ok)throw new Error(d.detail||"Order nahi hua");

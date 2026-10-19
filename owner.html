@@ -30,6 +30,10 @@ a{color:#ff6b81}.hide{display:none}
 <input type="hidden" id="dfId">
 <label>Dish ka naam</label><input id="dfName" placeholder="Jaise: Cheese Momos (8 pcs)">
 <div class="g2"><div><label>Category</label><input id="dfCat" list="cats" placeholder="Momos / Chowmein / Drinks"><datalist id="cats"></datalist></div><div><label>Price (₹)</label><input id="dfPrice" type="number" inputmode="numeric" placeholder="100"></div></div>
+<label>Half / Full jaise alag-alag rate (optional). Bharoge to upar ka single Price nahi lagega.</label>
+<div class="g2"><input id="v1l" placeholder="Half"><input id="v1p" type="number" inputmode="numeric" placeholder="₹ price"></div>
+<div class="g2"><input id="v2l" placeholder="Full"><input id="v2p" type="number" inputmode="numeric" placeholder="₹ price"></div>
+<div class="g2"><input id="v3l" placeholder="(optional) aur koi size"><input id="v3p" type="number" inputmode="numeric" placeholder="₹ price"></div>
 <label>Chhota description</label><input id="dfDesc" placeholder="Kya khaas hai is dish mein">
 <div class="g2"><div><label>Emoji (photo ki jagah)</label><input id="dfEmoji" placeholder="🥟"></div><div><label>Type</label><select id="dfVeg"><option value="1">🟢 Veg</option><option value="0">🔴 Non-Veg</option></select></div></div>
 <div class="acts"><button class="b" style="background:#2ecc71" onclick="saveDish()">💾 Save Dish</button><button class="b" onclick="resetDish()">Clear</button></div></div>
@@ -87,12 +91,14 @@ async function loadDishes(){DISHES=await api("/api/owner/dishes");
  $("cats").innerHTML=cats.map(function(c){return '<option value="'+esc(c)+'">'}).join("");
  var h="";cats.forEach(function(c){h+='<h3 style="margin:14px 0 8px;color:#7cc4e8">'+esc(c)+'</h3>';
   DISHES.forEach(function(d,i){if(d.cat!=c)return;
-   h+='<div class="card'+(d.avail?'':' off')+'"><div class="row"><b>'+esc(d.emoji)+' '+esc(d.name)+'</b><b>₹'+d.price+'</b></div><div class="muted">'+(d.veg?'🟢 Veg':'🔴 Non-veg')+' · '+esc(d.descr)+'</div>'+
+   h+='<div class="card'+(d.avail?'':' off')+'"><div class="row"><b>'+esc(d.emoji)+' '+esc(d.name)+'</b><b>'+priceTxt(d)+'</b></div><div class="muted">'+(d.veg?'🟢 Veg':'🔴 Non-veg')+' · '+esc(d.descr)+'</div>'+
    '<div class="acts"><button class="b" style="background:'+(d.avail?'#16a34a':'#b45309')+'" onclick="toggleDish('+d.id+')">'+(d.avail?'✅ Available':'⛔ Out of stock')+'</button><button class="b" style="background:#3498db" onclick="editDish('+i+')">✏️ Edit</button><button class="b" style="background:#7f1d1d" onclick="delDish('+d.id+')">🗑️</button></div></div>'})});
  $("dishes").innerHTML=h||'<div class="card">Abhi koi dish nahi. Upar se add karein.</div>'}
-function resetDish(){["dfId","dfName","dfCat","dfPrice","dfDesc","dfEmoji"].forEach(function(i){$(i).value=""});$("dfVeg").value="1";$("dfTitle").textContent="➕ Nayi Dish Add Karein"}
-function editDish(i){var d=DISHES[i];$("dfId").value=d.id;$("dfName").value=d.name;$("dfCat").value=d.cat;$("dfPrice").value=d.price;$("dfDesc").value=d.descr;$("dfEmoji").value=d.emoji;$("dfVeg").value=d.veg;$("dfTitle").textContent="✏️ Dish Edit: "+d.name;window.scrollTo({top:0,behavior:"smooth"})}
-async function saveDish(){var id=$("dfId").value;await api("/api/owner/dish",{id:id?+id:null,name:$("dfName").value,cat:$("dfCat").value,price:+$("dfPrice").value||0,descr:$("dfDesc").value,emoji:$("dfEmoji").value||"🍽️",veg:+$("dfVeg").value});resetDish();loadDishes()}
+function vars(){var o=[];[1,2,3].forEach(function(n){var l=$("v"+n+"l").value.trim(),p=+$("v"+n+"p").value;if(l&&p>0)o.push({l:l,p:p})});return o}
+function priceTxt(d){return d.vs&&d.vs.length?d.vs.map(function(v){return esc(v.l)+' ₹'+v.p}).join(' / '):'₹'+d.price}
+function resetDish(){[1,2,3].forEach(function(n){$("v"+n+"l").value="";$("v"+n+"p").value=""});["dfId","dfName","dfCat","dfPrice","dfDesc","dfEmoji"].forEach(function(i){$(i).value=""});$("dfVeg").value="1";$("dfTitle").textContent="➕ Nayi Dish Add Karein"}
+function editDish(i){var d=DISHES[i];$("dfId").value=d.id;$("dfName").value=d.name;$("dfCat").value=d.cat;$("dfPrice").value=d.price;$("dfDesc").value=d.descr;$("dfEmoji").value=d.emoji;$("dfVeg").value=d.veg;$("dfTitle").textContent="✏️ Dish Edit: "+d.name;[1,2,3].forEach(function(n){var v=(d.vs||[])[n-1];$("v"+n+"l").value=v?v.l:"";$("v"+n+"p").value=v?v.p:""});window.scrollTo({top:0,behavior:"smooth"})}
+async function saveDish(){var id=$("dfId").value;await api("/api/owner/dish",{id:id?+id:null,name:$("dfName").value,cat:$("dfCat").value,price:+$("dfPrice").value||0,variants:vars(),descr:$("dfDesc").value,emoji:$("dfEmoji").value||"🍽️",veg:+$("dfVeg").value});resetDish();loadDishes()}
 async function toggleDish(id){await api("/api/owner/dish/toggle",{id:id});loadDishes()}
 async function delDish(id){if(confirm("Ye dish hamesha ke liye hata dein?")){await api("/api/owner/dish/delete",{id:id});loadDishes()}}
 

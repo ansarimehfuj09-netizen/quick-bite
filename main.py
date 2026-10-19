@@ -1,4 +1,4 @@
-import os, time, hmac, hashlib
+import os, json, time, hmac, hashlib
 from datetime import datetime
 from typing import List, Optional
 from fastapi import FastAPI, HTTPException, Header, Request
@@ -75,6 +75,7 @@ class Dish(Base):
     name = Column(String(120)); cat = Column(String(60)); price = Column(Float)
     descr = Column(Text); emoji = Column(String(10)); veg = Column(Integer, default=1)
     avail = Column(Integer, default=1)
+    variants = Column(Text)
 
 class Coupon(Base):
     __tablename__ = "coupons"
@@ -102,6 +103,11 @@ for _c, _t in (("lat", "FLOAT"), ("lng", "FLOAT"), ("pay_status", "VARCHAR(20)")
             _cn.execute(text("ALTER TABLE orders ADD COLUMN " + _c + " " + _t))
     except Exception:
         pass
+try:
+    with engine.begin() as _cn:
+        _cn.execute(text("ALTER TABLE dishes ADD COLUMN variants TEXT"))
+except Exception:
+    pass
 with Session() as _s:
     if _s.query(Dish).count() == 0:
         for m in MENU:
@@ -140,6 +146,7 @@ app = FastAPI(title=RESTAURANT)
 class Line(BaseModel):
     id: int
     qty: int
+    v: Optional[int] = None
 class NewOrder(BaseModel):
     name: str; phone: str; address: str; pay: str; items: List[Line]
     lat: Optional[float] = None
@@ -151,9 +158,12 @@ class SetStatus(BaseModel):
     id: int; status: str
 class DelId(BaseModel):
     id: int
+class VarIn(BaseModel):
+    l: str; p: float
 class DishIn(BaseModel):
     id: Optional[int] = None
-    name: str; cat: str; price: float
+    name: str; cat: str; price: float = 0
+    variants: List[VarIn] = []
     descr: str = ""; emoji: str = "🍽️"; veg: int = 1
 class CouponIn(BaseModel):
     code: str; kind: str; value: float; min_order: float = 0
@@ -182,7 +192,8 @@ def menu():
         return {"name": S["name"], "banner": S["banner"], "sub": S["sub"], "open": S["open"],
                 "fee": num(S["fee"]), "free_above": num(S["free_above"]), "min": num(S["min"]), "upi": S["upi"],
                 "menu": [{"id": d.id, "n": d.name, "c": d.cat, "p": money(d.price), "e": d.emoji or "🍽️",
-                          "v": d.veg, "d": d.descr or "", "a": d.avail} for d in dishes]}
+                          "v": d.veg, "d": d.descr or "", "a": d.avail,
+                          "vs": json.loads(d.variants or "[]")} for d in dishes]}
 
 @app.post("/api/coupon/check")
 def coupon_check(c: CouponCheck):
@@ -209,8 +220,15 @@ def place(o: NewOrder):
                 raise HTTPException(400, "Galat item")
             if not d.avail:
                 raise HTTPException(400, d.name + " abhi available nahi hai")
-            sub += d.price * l.qty
-            parts.append("%s x%d" % (d.name, l.qty))
+            vs = json.loads(d.variants or "[]")
+            if vs:
+                if l.v is None or not (0 <= l.v < len(vs)):
+                    raise HTTPException(400, d.name + ": Half/Full chuniye")
+                price, label = vs[l.v]["p"], "%s (%s)" % (d.name, vs[l.v]["l"])
+            else:
+                price, label = d.price, d.name
+            sub += price * l.qty
+            parts.append("%s x%d" % (label, l.qty))
         if not parts or len(parts) > 30:
             raise HTTPException(400, "Cart khali hai")
         if sub < num(S["min"]):
@@ -300,12 +318,15 @@ def o_dishes(authorization: str = Header(None)):
     check_token(authorization)
     with Session() as s:
         return [{"id": d.id, "name": d.name, "cat": d.cat, "price": money(d.price), "descr": d.descr or "",
-                 "emoji": d.emoji or "", "veg": d.veg, "avail": d.avail} for d in s.query(Dish).order_by(Dish.cat, Dish.id).all()]
+                 "emoji": d.emoji or "", "veg": d.veg, "avail": d.avail,
+                 "vs": json.loads(d.variants or "[]")} for d in s.query(Dish).order_by(Dish.cat, Dish.id).all()]
 
 @app.post("/api/owner/dish")
 def o_dish_save(d: DishIn, authorization: str = Header(None)):
     check_token(authorization)
-    if not d.name.strip() or not d.cat.strip() or not (1 <= d.price <= 100000):
+    vs = [{"l": v.l.strip()[:20], "p": v.p} for v in d.variants if v.l.strip() and 1 <= v.p <= 100000][:3]
+    price = min(v["p"] for v in vs) if vs else d.price
+    if not d.name.strip() or not d.cat.strip() or not (1 <= price <= 100000):
         raise HTTPException(400, "Naam, category aur sahi price daalein")
     with Session() as s:
         if d.id:
@@ -314,7 +335,8 @@ def o_dish_save(d: DishIn, authorization: str = Header(None)):
                 raise HTTPException(404, "Dish nahi mili")
         else:
             r = Dish(avail=1); s.add(r)
-        r.name = d.name.strip()[:120]; r.cat = d.cat.strip()[:60]; r.price = d.price
+        r.name = d.name.strip()[:120]; r.cat = d.cat.strip()[:60]; r.price = price
+        r.variants = json.dumps(vs, ensure_ascii=False) if vs else None
         r.descr = d.descr.strip()[:300]; r.emoji = (d.emoji.strip() or "🍽️")[:8]; r.veg = 1 if d.veg else 0
         s.commit()
     return {"ok": True}

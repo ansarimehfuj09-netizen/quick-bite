@@ -40,6 +40,15 @@ input,select{width:100%;padding:12px;margin:5px 0 10px;border:1.5px solid var(--
 .badge{display:inline-block;padding:3px 10px;border-radius:12px;font-size:12px;font-weight:700;background:#fde68a;color:#78350f}
 .hide{display:none}
 </style></head><body>
+<div id="gate" style="display:none;position:fixed;inset:0;z-index:200;background:var(--bg);align-items:center;justify-content:center;padding:20px;overflow:auto">
+<div class="card" style="width:100%;max-width:380px;text-align:center;padding:24px">
+<div style="font-size:44px">🍔</div><h2 id="gtitle" style="margin:6px 0">Quick Bite</h2>
+<p style="color:var(--mu);font-size:14px;margin-bottom:14px">Order karne ke liye apne mobile number se login karein</p>
+<div style="display:flex;gap:8px;align-items:center"><div style="padding:12px;border:1.5px solid var(--bd);border-radius:10px;background:var(--bg);font-weight:700">+91</div><input id="gph" type="tel" inputmode="numeric" maxlength="10" placeholder="10-digit mobile number"></div>
+<button class="btn full" id="gsb" onclick="gSend()">OTP bhejo</button>
+<div id="gin" class="hide" style="margin-top:12px"><input id="gotp" inputmode="numeric" maxlength="6" placeholder="6-digit OTP" style="text-align:center;letter-spacing:6px;font-size:18px"><button class="btn full" onclick="gVerify()">Verify karke aage badhein ✅</button></div>
+<div id="gmsg" style="font-size:13px;margin-top:10px"></div></div></div>
+
 <header><h1 id="title">🍔 QUICK BITE</h1><div class="tabs"><button class="tab on" id="t-menu" onclick="show('menu')">Menu</button><button class="tab" id="t-track" onclick="show('track')">My Order</button></div></header>
 <main>
 <section id="v-menu"><div class="banner"><h2 id="bn1">Garam Garam, Fast Delivery ⚡</h2><p id="bn2"></p></div><div class="chips" id="chips"></div><div id="list"><div class="card">Menu load ho raha hai…</div></div></section>
@@ -48,7 +57,7 @@ input,select{width:100%;padding:12px;margin:5px 0 10px;border:1.5px solid var(--
 <div class="bar" id="bar"><div><div id="bc" style="font-size:12px;font-weight:700"></div><div style="font-size:18px;font-weight:800">₹<span id="bt">0</span></div></div><button class="btn" onclick="openCo()">View Cart 🛒</button></div>
 <div class="modal" id="co"><div class="sheet"><span class="xx" onclick="closeCo()">✕</span><h3 style="margin-bottom:10px">🛒 Your Cart</h3><div id="sum"></div>
 <hr style="border:0;border-top:1px solid var(--bd);margin:12px 0">
-<input id="nm" placeholder="Your name" autocomplete="name"><input id="ph" type="tel" inputmode="numeric" placeholder="Phone number (10 digits)" autocomplete="tel" oninput="phChange()"><div id="otpbox" class="hide" style="margin-bottom:10px"><button class="btn" id="otpb" style="width:100%;border-radius:10px;background:var(--blue)" onclick="sendOtp()">📩 Is number par OTP bhejo</button><div id="otpin" class="hide"><input id="otp" inputmode="numeric" maxlength="6" placeholder="6-digit OTP daalein"><button class="btn" style="width:100%;border-radius:10px" onclick="verifyOtp()">✅ Verify karein</button></div><div id="otpmsg" style="font-size:13px;margin-top:6px"></div></div><div id="otpok" class="hide" style="color:#2e9e3e;font-weight:700;font-size:13px;margin-bottom:8px">✅ Number verified</div><input id="ad" placeholder="Full delivery address" autocomplete="street-address">
+<input id="nm" placeholder="Your name" autocomplete="name"><input id="ph" type="tel" inputmode="numeric" placeholder="Phone number (10 digits)" autocomplete="tel" oninput="phChange()"><div id="otpbox" class="hide" style="margin-bottom:10px"><button class="btn" id="otpb" style="width:100%;border-radius:10px;background:var(--blue)" onclick="sendOtp()">📩 Is number par OTP bhejo</button><div id="otpin" class="hide"><input id="otp" inputmode="numeric" maxlength="6" placeholder="6-digit OTP daalein"><button class="btn" style="width:100%;border-radius:10px" onclick="verifyOtp()">✅ Verify karein</button></div><div id="otpmsg" style="font-size:13px;margin-top:6px"></div></div><div id="otpok" class="hide" style="color:#2e9e3e;font-weight:700;font-size:13px;margin-bottom:8px">✅ Number verified · <a href="#" onclick="logoutC();return false" style="color:inherit;font-weight:400">Number badlein</a></div><input id="ad" placeholder="Full delivery address" autocomplete="street-address">
 <button class="btn" id="locb" onclick="getLoc()" style="width:100%;border-radius:10px;background:var(--blue);margin-bottom:10px">📍 Meri location bhejo (delivery easy hogi)</button>
 <div style="display:flex;gap:8px"><input id="cp" placeholder="Coupon code (agar hai)" style="text-transform:uppercase"><button class="btn" style="border-radius:10px;margin:5px 0 10px" onclick="applyCoupon()">Apply</button></div><div id="cpmsg" style="font-size:13px;margin-bottom:8px"></div>
 <select id="pay"><option>Cash on Delivery</option><option>Pay Now (UPI)</option></select>
@@ -62,7 +71,7 @@ function byId(i){return MENU.filter(function(x){return x.id==i})[0]}
 async function load(){
  try{var r=await fetch("/api/menu");var d=await r.json();MENU=d.menu;CFG=d;$("bn1").textContent=d.open=="0"?"🔴 Restaurant abhi band hai":(d.banner||"");$("bn2").textContent=d.open=="0"?"Thodi der baad order karein":(d.sub||"");if(!d.upi){var sel=$("pay");for(var k=sel.options.length-1;k>=0;k--)if(sel.options[k].text.indexOf("UPI")>=0)sel.remove(k)}$("title").textContent="🍔 "+d.name.toUpperCase();document.title=d.name+" – Order Online"}
  catch(e){$("list").innerHTML='<div class="card">Menu load nahi hua. Page refresh karein.</div>';return}
- CATS=["All"].concat(MENU.map(function(m){return m.c}).filter(function(x,i,a){return a.indexOf(x)==i}));chips();menu();watch();try{var pf=JSON.parse(localStorage.getItem("qb_prof"));if(pf){$("nm").value=pf.n;$("ph").value=pf.p;$("ad").value=pf.a}}catch(e){}phChange()}
+ CATS=["All"].concat(MENU.map(function(m){return m.c}).filter(function(x,i,a){return a.indexOf(x)==i}));chips();menu();watch();try{var pf=JSON.parse(localStorage.getItem("qb_prof"));if(pf){$("nm").value=pf.n;$("ph").value=pf.p;$("ad").value=pf.a}}catch(e){}gateInit();phChange()}
 function chips(){$("chips").innerHTML=CATS.map(function(c,i){return '<button class="chip'+(c==cat?" on":"")+'" data-i="'+i+'">'+esc(c)+'</button>'}).join("");
  document.querySelectorAll(".chip").forEach(function(b){b.onclick=function(){cat=CATS[b.dataset.i];chips();menu()}})}
 function ctl(key,a){var q=cart[key]||0;if(!a)return '<span style="font-size:12px;font-weight:700;color:var(--red)">Out of stock</span>';
@@ -104,6 +113,23 @@ async function verifyOtp(){var p=ph10(),c=$("otp").value.trim();if(c.length<6){a
  try{var r=await fetch("/api/otp/verify",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({phone:p,code:c})});var d=await r.json();
   if(!r.ok)throw new Error(d.detail||"OTP galat hai");localStorage.setItem("qb_auth",JSON.stringify({phone:p,token:d.token}));$("otp").value="";phChange()}
  catch(e){$("otpmsg").style.color="var(--red)";$("otpmsg").textContent=e.message}}
+function getAuth(){try{var a=JSON.parse(localStorage.getItem("qb_auth"));if(a&&a.phone&&a.token){var e=+String(a.token).split(".")[1];if(e*1000>Date.now())return a}}catch(x){}return null}
+function showGate(){$("gate").style.display="flex"}
+function applyAuth(a){$("ph").value=a.phone;$("ph").readOnly=true;$("gate").style.display="none";phChange()}
+function logoutC(){localStorage.removeItem("qb_auth");location.reload()}
+function gateInit(){if(!CFG.otp)return;$("gtitle").textContent=CFG.name||"Quick Bite";var a=getAuth();if(a)applyAuth(a);else showGate()}
+async function gSend(){var p=$("gph").value.replace(/\D/g,"").slice(-10);
+ if(p.length<10){$("gmsg").style.color="var(--red)";$("gmsg").textContent="Pehle 10-digit mobile number daalein";return}
+ $("gsb").disabled=true;$("gmsg").style.color="var(--mu)";$("gmsg").textContent="OTP bhej rahe hain…";
+ try{var r=await fetch("/api/otp/send",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({phone:p})});var d=await r.json();
+  if(!r.ok)throw new Error(d.detail||"OTP nahi gaya");$("gin").classList.remove("hide");$("gmsg").textContent="OTP SMS se aa raha hai (5 minute tak valid).";$("gsb").textContent="OTP dobara bhejo"}
+ catch(e){$("gmsg").style.color="var(--red)";$("gmsg").textContent=e.message}
+ $("gsb").disabled=false}
+async function gVerify(){var p=$("gph").value.replace(/\D/g,"").slice(-10),c=$("gotp").value.trim();
+ if(c.length<6){$("gmsg").style.color="var(--red)";$("gmsg").textContent="6-digit OTP daalein";return}
+ try{var r=await fetch("/api/otp/verify",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({phone:p,code:c})});var d=await r.json();
+  if(!r.ok)throw new Error(d.detail||"OTP galat hai");var a={phone:p,token:d.token};localStorage.setItem("qb_auth",JSON.stringify(a));$("gotp").value="";applyAuth(a)}
+ catch(e){$("gmsg").style.color="var(--red)";$("gmsg").textContent=e.message}}
 function getLoc(){
  if(!navigator.geolocation){alert("Aapka browser location support nahi karta. Address mein landmark likh dein.");return}
  $("locb").textContent="Location dhoondh rahe hain…";
@@ -119,7 +145,7 @@ async function place(){
  var items=Object.keys(cart).map(function(i){var a=i.split("_");return{id:+a[0],qty:cart[i],v:a.length>1?+a[1]:null}});
  $("pbtn").disabled=true;$("pbtn").textContent="Order ja raha hai…";
  try{var r=await fetch("/api/order",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({name:n,phone:p,address:a,pay:$("pay").value,items:items,lat:LAT,lng:LNG,coupon:COUPON,token:tokFor(p)})});
-  var d=await r.json();if(!r.ok)throw new Error(d.detail||"Order nahi hua");
+  var d=await r.json();if(r.status==401&&CFG.otp){localStorage.removeItem("qb_auth");$("ph").readOnly=false;$("pbtn").disabled=false;$("pbtn").textContent="Place Order 🚀";closeCo();showGate();return}if(!r.ok)throw new Error(d.detail||"Order nahi hua");
   localStorage.setItem("qb_prof",JSON.stringify({n:n,p:p,a:a}));localStorage.setItem("qb_order",JSON.stringify({id:d.id,phone:p}));cart={};COUPON="";DISC=0;$("cp").value="";$("cpmsg").textContent="";menu();bar();closeCo();show("track")}
  catch(e){alert(e.message)}
  $("pbtn").disabled=false;$("pbtn").textContent="Place Order 🚀"}

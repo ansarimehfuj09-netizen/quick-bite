@@ -55,10 +55,10 @@ DEFAULTS = {"name": RESTAURANT, "banner": "Garam Garam, Fast Delivery ⚡",
             "sub": "Momos • Chowmein • Fries • Chilli Potato", "eta": "30-40 min", "city": "", "shop_phone": "", "shop_address": "", "fee": str(DELIVERY_FEE),
             "free_above": str(FREE_DELIVERY_ABOVE), "min": str(MIN_ORDER), "upi": UPI_ID, "open": "1"}
 
-url = os.getenv("DATABASE_URL", "sqlite:///quick_bite.db")
+url = os.getenv("NEON_DATABASE_URL") or os.getenv("DATABASE_URL", "sqlite:///quick_bite.db")
 if url.startswith("postgres://"):
     url = url.replace("postgres://", "postgresql://", 1)
-engine = create_engine(url, pool_pre_ping=True,
+engine = create_engine(url, pool_pre_ping=True, pool_recycle=280,
                        connect_args={"check_same_thread": False} if url.startswith("sqlite") else {})
 Session = sessionmaker(bind=engine)
 Base = declarative_base()
@@ -437,6 +437,7 @@ def place(o: NewOrder):
             oid, int(total), o.pay, r.name, phone, r.items, r.address, mp)
     threading.Thread(target=tg_send, args=(text,), daemon=True).start()
     t = threading.Timer(120, remind, args=(oid, 1)); t.daemon = True; t.start()
+    threading.Thread(target=auto_backup_if_due, daemon=True).start()
     return {"id": oid, "total": total}
 
 @app.get("/api/order/{oid}")
@@ -669,9 +670,7 @@ def o_tg_off(authorization: str = Header(None)):
 
 BK_SETTINGS = ("name", "banner", "sub", "eta", "city", "shop_phone", "shop_address", "fee", "free_above", "min", "upi", "open")
 
-@app.get("/api/owner/backup")
-def o_backup(orders: int = 0, authorization: str = Header(None)):
-    check_token(authorization)
+def make_backup(orders=0):
     with Session() as s:
         S = get_settings(s)
         out = {"app": "quick-bite", "version": 1, "created": datetime.utcnow().isoformat() + "Z",
@@ -687,6 +686,78 @@ def o_backup(orders: int = 0, authorization: str = Header(None)):
                               "pay_status": r.pay_status, "status": r.status, "coupon": r.coupon, "discount": r.discount}
                              for r in s.query(Order).order_by(Order.id).all()]
     return out
+
+@app.get("/api/owner/backup")
+def o_backup(orders: int = 0, authorization: str = Header(None)):
+    check_token(authorization)
+    return make_backup(orders)
+
+def set_setting(s, k, v):
+    r = s.get(Setting, k)
+    if r:
+        r.v = v
+    else:
+        s.add(Setting(k=k, v=v))
+
+def tg_send_file(filename, data, caption):
+    tok, chat = tg_creds()
+    if not tok or not chat:
+        return False
+    b = os.urandom(8).hex()
+    def part(name, val):
+        return ("--%s\r\nContent-Disposition: form-data; name=\"%s\"\r\n\r\n" % (b, name)).encode() + val.encode() + b"\r\n"
+    body = part("chat_id", str(chat)) + part("caption", caption) + \
+        ("--%s\r\nContent-Disposition: form-data; name=\"document\"; filename=\"%s\"\r\nContent-Type: application/json\r\n\r\n" % (b, filename)).encode() + \
+        data + ("\r\n--%s--\r\n" % b).encode()
+    try:
+        req = urllib.request.Request("https://api.telegram.org/bot%s/sendDocument" % tok, data=body, method="POST",
+                                     headers={"Content-Type": "multipart/form-data; boundary=" + b})
+        with urllib.request.urlopen(req, timeout=30) as r:
+            return bool(json.loads(r.read().decode()).get("ok"))
+    except Exception:
+        return False
+
+_bk_lock = threading.Lock()
+def auto_backup_if_due(force=False):
+    if not _bk_lock.acquire(blocking=False):
+        return False
+    try:
+        tok, chat = tg_creds()
+        if not tok or not chat:
+            return False
+        with Session() as s:
+            r = s.get(Setting, "last_backup")
+            last = float(r.v) if r and r.v else 0
+        if not force and time.time() - last < 20 * 3600:
+            return False
+        data = json.dumps(make_backup(1), ensure_ascii=False).encode("utf-8")
+        day = (datetime.utcnow() + timedelta(hours=5, minutes=30)).strftime("%Y-%m-%d")
+        if tg_send_file("quickbite-backup-%s.json" % day, data, "💾 Quick Bite auto backup (menu, coupons, settings, orders). Is file ko safe rakhein."):
+            with Session() as s:
+                set_setting(s, "last_backup", str(time.time())); s.commit()
+            return True
+        return False
+    except Exception as e:
+        print("auto backup error", e)
+        return False
+    finally:
+        _bk_lock.release()
+
+def backup_loop():
+    time.sleep(90)
+    while True:
+        try:
+            auto_backup_if_due()
+        except Exception:
+            pass
+        time.sleep(3600)
+
+@app.post("/api/owner/backup/telegram")
+def o_backup_tg(authorization: str = Header(None)):
+    check_token(authorization)
+    if not auto_backup_if_due(force=True):
+        raise HTTPException(400, "Backup nahi gaya. Pehle Telegram Connect karein")
+    return {"ok": True}
 
 @app.post("/api/owner/restore")
 def o_restore(d: RestoreIn, authorization: str = Header(None)):
@@ -792,3 +863,5 @@ def robots(request: Request):
 def sitemap(request: Request):
     xml = '<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><url><loc>%s/</loc><changefreq>daily</changefreq><priority>1.0</priority></url></urlset>' % site_base(request)
     return Response(content=xml, media_type="application/xml")
+
+threading.Thread(target=backup_loop, daemon=True).start()

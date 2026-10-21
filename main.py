@@ -1,8 +1,9 @@
-import os, json, threading, time, hmac, hashlib, base64, urllib.request, urllib.parse, urllib.error
+from html import escape as hx
+import os, re, json, threading, time, hmac, hashlib, base64, urllib.request, urllib.parse, urllib.error
 from datetime import datetime, timedelta
 from typing import List, Optional
 from fastapi import FastAPI, HTTPException, Header, Request
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, PlainTextResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from sqlalchemy import text, create_engine, Column, Integer, String, Float, DateTime, Text
@@ -51,7 +52,7 @@ MENU = [
 
 STATUSES = ["Received", "Preparing", "On Way", "Delivered", "Cancelled"]
 DEFAULTS = {"name": RESTAURANT, "banner": "Garam Garam, Fast Delivery ⚡",
-            "sub": "Momos • Chowmein • Fries • Chilli Potato", "eta": "30-40 min", "fee": str(DELIVERY_FEE),
+            "sub": "Momos • Chowmein • Fries • Chilli Potato", "eta": "30-40 min", "city": "", "shop_phone": "", "shop_address": "", "fee": str(DELIVERY_FEE),
             "free_above": str(FREE_DELIVERY_ABOVE), "min": str(MIN_ORDER), "upi": UPI_ID, "open": "1"}
 
 url = os.getenv("DATABASE_URL", "sqlite:///quick_bite.db")
@@ -232,6 +233,48 @@ def remind(oid, n):
     if n < 3:
         t = threading.Timer(120, remind, args=(oid, n + 1)); t.daemon = True; t.start()
 
+def seo_html(src, S, dishes, base):
+    name = S["name"]; city = (S.get("city") or "").strip()
+    cats = []
+    for d in dishes:
+        if d.cat not in cats:
+            cats.append(d.cat)
+    where = (" in " + city) if city else ""
+    title = "%s - Online Food Order & Home Delivery%s" % (name, where)
+    desc = ("%s: %s. Order online with fast home delivery%s. Cash on Delivery and UPI payment." % (name, ", ".join(cats[:5]), where))[:300]
+    ld = {"@context": "https://schema.org", "@type": "Restaurant", "name": name, "url": base + "/",
+          "servesCuisine": cats[:6], "priceRange": "Rs",
+          "hasMenu": {"@type": "Menu", "hasMenuSection": [
+              {"@type": "MenuSection", "name": c, "hasMenuItem": [
+                  {"@type": "MenuItem", "name": d.name, "offers": {"@type": "Offer", "price": str(int(d.price)), "priceCurrency": "INR"}}
+                  for d in dishes if d.cat == c]} for c in cats]}}
+    ph = "".join(ch for ch in (S.get("shop_phone") or "") if ch.isdigit())[-10:]
+    if len(ph) == 10:
+        ld["telephone"] = "+91" + ph
+    if city or S.get("shop_address"):
+        ld["address"] = {"@type": "PostalAddress", "streetAddress": S.get("shop_address") or "",
+                         "addressLocality": city, "addressCountry": "IN"}
+    head = ('<title>%s</title>\n<meta name="description" content="%s">\n<link rel="canonical" href="%s/">\n'
+            '<link rel="icon" href="/static/icon.svg" type="image/svg+xml">\n'
+            '<meta property="og:type" content="restaurant.restaurant"><meta property="og:title" content="%s">'
+            '<meta property="og:description" content="%s"><meta property="og:url" content="%s/">'
+            '<meta property="og:site_name" content="%s"><meta name="twitter:card" content="summary">\n'
+            '<script type="application/ld+json">%s</script>') % (
+        hx(title), hx(desc), hx(base), hx(title), hx(desc), hx(base), hx(name),
+        json.dumps(ld, ensure_ascii=False).replace("</", "<\\/"))
+    rows = ""
+    for c in cats:
+        rows += "<p><b>%s:</b> %s</p>" % (hx(c), " &middot; ".join("%s &#8377;%d" % (hx(d.name), int(d.price)) for d in dishes if d.cat == c))
+    foot = ('<section id="seo-menu" style="max-width:640px;margin:26px auto 10px;padding:0 14px;font-size:12px;color:var(--mu);line-height:1.6">'
+            '<h2 style="font-size:14px;margin-bottom:6px">%s - Menu &amp; Prices%s</h2>%s</section>') % (hx(name), hx(where), rows)
+    out = re.sub(r"<title>.*?</title>", lambda x: head, src, count=1, flags=re.S)
+    out = out.replace('<html lang="en">', '<html lang="en-IN">', 1)
+    return out.replace("</main>", "</main>\n" + foot, 1)
+
+def site_base(request):
+    host = request.headers.get("host", "")
+    return ("http://" if host.startswith(("localhost", "127.")) else "https://") + host
+
 app = FastAPI(title=RESTAURANT)
 
 class Line(BaseModel):
@@ -268,7 +311,7 @@ class CouponCheck(BaseModel):
 class TgIn(BaseModel):
     token: str
 class SettingsIn(BaseModel):
-    name: str; banner: str; sub: str; eta: str = ""; fee: float; free_above: float; min: float; upi: str; open: int
+    name: str; banner: str; sub: str; eta: str = ""; city: str = ""; shop_phone: str = ""; shop_address: str = ""; fee: float; free_above: float; min: float; upi: str; open: int
 
 def calc_coupon(s, code, subtotal):
     c = s.query(Coupon).filter(Coupon.code == code.strip().upper(), Coupon.active == 1).first()
@@ -548,13 +591,15 @@ def o_settings(authorization: str = Header(None)):
     check_token(authorization)
     with Session() as s:
         S = get_settings(s)
-        return {"name": S["name"], "banner": S["banner"], "sub": S["sub"], "eta": S["eta"], "fee": num(S["fee"]),
+        return {"name": S["name"], "banner": S["banner"], "sub": S["sub"], "eta": S["eta"], "city": S["city"], "shop_phone": S["shop_phone"],
+                "shop_address": S["shop_address"], "fee": num(S["fee"]),
                 "free_above": num(S["free_above"]), "min": num(S["min"]), "upi": S["upi"], "open": int(S["open"])}
 
 @app.post("/api/owner/settings")
 def o_settings_save(d: SettingsIn, authorization: str = Header(None)):
     check_token(authorization)
-    vals = {"name": d.name.strip()[:60] or RESTAURANT, "banner": d.banner.strip()[:80], "sub": d.sub.strip()[:120], "eta": d.eta.strip()[:30],
+    vals = {"name": d.name.strip()[:60] or RESTAURANT, "banner": d.banner.strip()[:80], "sub": d.sub.strip()[:120], "eta": d.eta.strip()[:30], "city": d.city.strip()[:40],
+            "shop_phone": d.shop_phone.strip()[:15], "shop_address": d.shop_address.strip()[:150],
             "fee": str(int(max(d.fee, 0))), "free_above": str(int(max(d.free_above, 0))), "min": str(int(max(d.min, 0))),
             "upi": d.upi.strip()[:80], "open": "1" if d.open else "0"}
     with Session() as s:
@@ -654,5 +699,24 @@ def manifest():
             "icons": [{"src": "/static/icon.svg", "sizes": "any", "type": "image/svg+xml"}]}
 app.mount("/static", StaticFiles(directory=os.path.join(BASE, "static")), name="static")
 @app.get("/")
-def home():
-    return FileResponse(page("index.html"))
+def home(request: Request):
+    with open(page("index.html"), encoding="utf-8") as f:
+        src = f.read()
+    try:
+        with Session() as s:
+            S = get_settings(s)
+            dishes = s.query(Dish).filter(Dish.avail == 1).order_by(Dish.id).all()
+            out = seo_html(src, S, dishes, site_base(request))
+    except Exception as e:
+        print("seo error", e)
+        out = src
+    return Response(content=out, media_type="text/html")
+
+@app.get("/robots.txt")
+def robots(request: Request):
+    return PlainTextResponse("User-agent: *\nAllow: /\nDisallow: /owner\nDisallow: /api/\nSitemap: %s/sitemap.xml\n" % site_base(request))
+
+@app.get("/sitemap.xml")
+def sitemap(request: Request):
+    xml = '<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><url><loc>%s/</loc><changefreq>daily</changefreq><priority>1.0</priority></url></urlset>' % site_base(request)
+    return Response(content=xml, media_type="application/xml")

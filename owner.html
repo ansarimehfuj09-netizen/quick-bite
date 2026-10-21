@@ -54,6 +54,9 @@ a{color:#ff6b81}.hide{display:none}
 <label>Top banner (bada text)</label><input id="sBanner" placeholder="Aaj ka offer: 10% off!">
 <label>Banner ki neeche wali line</label><input id="sSub">
 <label>Delivery time (customer ko dikhega)</label><input id="sEta" placeholder="30-40 min">
+<label>🔎 Google ke liye: Shehar / area (jaise Ghaziabad)</label><input id="sCity" placeholder="Shehar ya area ka naam">
+<label>🔎 Dukaan ka phone number</label><input id="sPhone" type="tel" inputmode="numeric" maxlength="10" placeholder="10-digit">
+<label>🔎 Dukaan ka poora address</label><input id="sAddr" placeholder="Gali, area, shehar">
 <div class="g2"><div><label>Delivery charge (₹)</label><input id="sFee" type="number" inputmode="numeric"></div><div><label>Free delivery kitne se upar (₹)</label><input id="sFree" type="number" inputmode="numeric"></div></div>
 <label>Minimum order (₹)</label><input id="sMin" type="number" inputmode="numeric">
 <label>Aapki UPI ID (Pay Now ke liye)</label><input id="sUpi" placeholder="9876543210@ybl">
@@ -162,8 +165,8 @@ async function tgStatus(){try{var s=await api("/api/owner/telegram");$("tgSt").t
 async function tgConnect(){await api("/api/owner/telegram",{token:$("tgTok").value});$("tgTok").value="";alert("✅ Connect ho gaya! Telegram par ek message aaya hoga.");tgStatus()}
 async function tgTest(){await api("/api/owner/telegram/test",{});alert("Test message bhej diya. Telegram dekhein.")}
 async function tgOff(){if(confirm("Telegram alert band karein?")){await api("/api/owner/telegram/off",{});tgStatus()}}
-async function loadSettings(){tgStatus();var s=await api("/api/owner/settings");$("sName").value=s.name;$("sBanner").value=s.banner;$("sSub").value=s.sub;$("sEta").value=s.eta||"";$("sFee").value=s.fee;$("sFree").value=s.free_above;$("sMin").value=s.min;$("sUpi").value=s.upi;$("sOpen").value=s.open}
-async function saveSettings(){await api("/api/owner/settings",{name:$("sName").value,banner:$("sBanner").value,sub:$("sSub").value,eta:$("sEta").value,fee:+$("sFee").value||0,free_above:+$("sFree").value||0,min:+$("sMin").value||0,upi:$("sUpi").value,open:+$("sOpen").value});alert("✅ Settings save ho gayi")}
+async function loadSettings(){tgStatus();var s=await api("/api/owner/settings");$("sName").value=s.name;$("sBanner").value=s.banner;$("sSub").value=s.sub;$("sEta").value=s.eta||"";$("sCity").value=s.city||"";$("sPhone").value=s.shop_phone||"";$("sAddr").value=s.shop_address||"";$("sFee").value=s.fee;$("sFree").value=s.free_above;$("sMin").value=s.min;$("sUpi").value=s.upi;$("sOpen").value=s.open}
+async function saveSettings(){await api("/api/owner/settings",{name:$("sName").value,banner:$("sBanner").value,sub:$("sSub").value,eta:$("sEta").value,city:$("sCity").value,shop_phone:$("sPhone").value,shop_address:$("sAddr").value,fee:+$("sFee").value||0,free_above:+$("sFree").value||0,min:+$("sMin").value||0,upi:$("sUpi").value,open:+$("sOpen").value});alert("✅ Settings save ho gayi")}
 
 function start(){$("login").classList.add("hide");$("app").classList.remove("hide");load();fetch("/api/menu").then(function(r){return r.json()}).then(function(d){SHOP=d.name}).catch(function(){});setInterval(load,8000);setInterval(function(){if(sound&&LASTO.some(function(o){return o.status=="Received"}))beep()},20000)}
 if(tok)start();

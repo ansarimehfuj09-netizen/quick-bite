@@ -1,7 +1,7 @@
 from html import escape as hx
 import os, re, json, threading, time, hmac, hashlib, base64, urllib.request, urllib.parse, urllib.error
 from datetime import datetime, timedelta
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 from fastapi import FastAPI, HTTPException, Header, Request
 from fastapi.responses import FileResponse, PlainTextResponse, Response
 from fastapi.staticfiles import StaticFiles
@@ -308,6 +308,8 @@ class CouponIn(BaseModel):
     code: str; kind: str; value: float; min_order: float = 0
 class CouponCheck(BaseModel):
     code: str; subtotal: float
+class RestoreIn(BaseModel):
+    data: Dict[str, Any]
 class TgIn(BaseModel):
     token: str
 class SettingsIn(BaseModel):
@@ -664,6 +666,76 @@ def o_tg_off(authorization: str = Header(None)):
                 s.delete(r)
         s.commit()
     return {"ok": True}
+
+BK_SETTINGS = ("name", "banner", "sub", "eta", "city", "shop_phone", "shop_address", "fee", "free_above", "min", "upi", "open")
+
+@app.get("/api/owner/backup")
+def o_backup(orders: int = 0, authorization: str = Header(None)):
+    check_token(authorization)
+    with Session() as s:
+        S = get_settings(s)
+        out = {"app": "quick-bite", "version": 1, "created": datetime.utcnow().isoformat() + "Z",
+               "settings": {k: S.get(k, "") for k in BK_SETTINGS},
+               "dishes": [{"name": d.name, "cat": d.cat, "price": d.price, "descr": d.descr or "", "emoji": d.emoji or "",
+                           "veg": d.veg, "avail": d.avail, "variants": json.loads(d.variants or "[]")}
+                          for d in s.query(Dish).order_by(Dish.id).all()],
+               "coupons": [{"code": c.code, "kind": c.kind, "value": c.value, "min_order": c.min_order or 0, "active": c.active}
+                           for c in s.query(Coupon).order_by(Coupon.id).all()]}
+        if orders:
+            out["orders"] = [{"id": r.id, "time": r.created.isoformat() + "Z", "name": r.name, "phone": r.phone,
+                              "address": r.address, "items": r.items, "total": r.total, "pay": r.pay,
+                              "pay_status": r.pay_status, "status": r.status, "coupon": r.coupon, "discount": r.discount}
+                             for r in s.query(Order).order_by(Order.id).all()]
+    return out
+
+@app.post("/api/owner/restore")
+def o_restore(d: RestoreIn, authorization: str = Header(None)):
+    check_token(authorization)
+    b = d.data
+    if b.get("app") != "quick-bite" or not isinstance(b.get("dishes"), list):
+        raise HTTPException(400, "Ye Quick Bite ki backup file nahi lag rahi")
+    new_dishes = []
+    for x in b["dishes"][:500]:
+        try:
+            name = str(x.get("name", "")).strip()[:120]; cat = str(x.get("cat", "")).strip()[:60]
+            price = float(x.get("price"))
+            vs = []
+            for v in (x.get("variants") or [])[:3]:
+                if isinstance(v, dict) and str(v.get("l", "")).strip() and float(v.get("p", 0)) > 0:
+                    vs.append({"l": str(v["l"]).strip()[:20], "p": float(v["p"])})
+            if name and cat and price > 0:
+                new_dishes.append(Dish(name=name, cat=cat, price=price, descr=str(x.get("descr", ""))[:300],
+                                       emoji=(str(x.get("emoji", "")) or "🍽️")[:8], veg=1 if x.get("veg", 1) else 0,
+                                       avail=1 if x.get("avail", 1) else 0,
+                                       variants=json.dumps(vs, ensure_ascii=False) if vs else None))
+        except Exception:
+            continue
+    if b["dishes"] and not new_dishes:
+        raise HTTPException(400, "Backup mein koi sahi dish nahi mili")
+    new_coupons, seen = [], set()
+    for x in (b.get("coupons") or [])[:200]:
+        try:
+            code = "".join(ch for ch in str(x.get("code", "")).upper() if ch.isalnum())[:30]
+            kind = x.get("kind"); val = float(x.get("value"))
+            if code and code not in seen and kind in ("percent", "flat") and val > 0 and not (kind == "percent" and val > 90):
+                seen.add(code)
+                new_coupons.append(Coupon(code=code, kind=kind, value=val, min_order=max(float(x.get("min_order", 0) or 0), 0),
+                                          active=1 if x.get("active", 1) else 0))
+        except Exception:
+            continue
+    st = b.get("settings") or {}
+    with Session() as s:
+        s.query(Dish).delete(); s.query(Coupon).delete()
+        s.add_all(new_dishes); s.add_all(new_coupons)
+        for k in BK_SETTINGS:
+            if k in st:
+                r = s.get(Setting, k)
+                if r:
+                    r.v = str(st[k])[:150]
+                else:
+                    s.add(Setting(k=k, v=str(st[k])[:150]))
+        s.commit()
+    return {"dishes": len(new_dishes), "coupons": len(new_coupons)}
 
 @app.get("/api/owner/report")
 def o_report(authorization: str = Header(None)):

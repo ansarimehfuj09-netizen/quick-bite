@@ -67,7 +67,14 @@ a{color:#ff6b81}.hide{display:none}
 <p class="muted">1) Telegram mein <b>@BotFather</b> kholo → <b>/newbot</b> bhejo → naam do → jo <b>token</b> mile wo yahan paste karo.<br>2) Apne naye bot ko Telegram mein kholo aur <b>/start</b> bhejo.<br>3) Neeche <b>Connect</b> dabao.</p>
 <input id="tgTok" placeholder="Bot token (123456:ABC...)" style="margin-top:8px">
 <div id="tgSt" class="muted" style="margin-bottom:8px"></div>
-<div class="acts"><button class="b" style="background:#25a7e0" onclick="tgConnect()">🔗 Connect</button><button class="b" style="background:#16a34a" onclick="tgTest()">🔔 Test</button><button class="b" style="background:#7f1d1d" onclick="tgOff()">Band karo</button></div></div></section>
+<div class="acts"><button class="b" style="background:#25a7e0" onclick="tgConnect()">🔗 Connect</button><button class="b" style="background:#16a34a" onclick="tgTest()">🔔 Test</button><button class="b" style="background:#7f1d1d" onclick="tgOff()">Band karo</button></div></div>
+<div class="card" style="border-left-color:#e67e22"><b>💾 Backup / Restore</b>
+<p class="muted" style="margin:6px 0">Render ka free database <b>17 Nov 2026</b> ko expire hoga. Usse <b>pehle Backup</b> download kar lo. Isme aapka menu (Half/Full ke saath), coupons aur settings hoti hain. Naya database lagne ke baad <b>Restore</b> se sab wapas aa jata hai. (Telegram dobara Connect karna padega.)</p>
+<label style="display:block;margin:8px 0"><input type="checkbox" id="bkOrders" style="width:auto;margin:0 6px 0 0"> Orders bhi file mein rakhein (sirf record ke liye. Isme customers ke phone aur address hote hain, file ko safe rakhna)</label>
+<button class="b" style="background:#e67e22;width:100%" onclick="doBackup()">⬇️ Backup download karein</button>
+<hr style="border:0;border-top:1px solid #333;margin:14px 0">
+<label>Backup file chuno (.json)</label><input type="file" id="rsFile" accept=".json,application/json">
+<button class="b" style="background:#2c3e50;width:100%" onclick="doRestore()">⬆️ Restore karein</button></div></section>
 </div>
 
 <script>
@@ -161,6 +168,13 @@ async function togCoupon(id){await api("/api/owner/coupon/toggle",{id:id});loadC
 async function delCoupon(id){if(confirm("Ye coupon delete karein?")){await api("/api/owner/coupon/delete",{id:id});loadCoupons()}}
 
 /* ---------- SETTINGS ---------- */
+async function doBackup(){var r=await fetch("/api/owner/backup?orders="+($("bkOrders").checked?1:0),{headers:{Authorization:tok}});
+ if(r.status==401){logout();return}if(!r.ok){alert("Backup nahi bana");return}
+ var b=await r.blob(),a=document.createElement("a");a.href=URL.createObjectURL(b);a.download="quickbite-backup-"+new Date().toISOString().slice(0,10)+".json";document.body.appendChild(a);a.click();a.remove()}
+async function doRestore(){var f=$("rsFile").files[0];if(!f){alert("Pehle backup file chuno");return}
+ if(!confirm("Isse abhi ka menu, coupons aur settings badal jayengi. Pakka restore karein?"))return;
+ var d;try{d=JSON.parse(await f.text())}catch(e){alert("File sahi nahi hai");return}
+ var r=await api("/api/owner/restore",{data:d});alert("✅ Restore ho gaya: "+r.dishes+" dishes, "+r.coupons+" coupons");loadSettings()}
 async function tgStatus(){try{var s=await api("/api/owner/telegram");$("tgSt").textContent=s.connected?"✅ Telegram alert chalu hai":"❌ Abhi connect nahi hai"}catch(e){}}
 async function tgConnect(){await api("/api/owner/telegram",{token:$("tgTok").value});$("tgTok").value="";alert("✅ Connect ho gaya! Telegram par ek message aaya hoga.");tgStatus()}
 async function tgTest(){await api("/api/owner/telegram/test",{});alert("Test message bhej diya. Telegram dekhein.")}

@@ -69,7 +69,7 @@ function $(i){return document.getElementById(i)}
 function esc(s){return String(s).replace(/[&<>"]/g,function(c){return{"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]})}
 function byId(i){return MENU.filter(function(x){return x.id==i})[0]}
 async function load(){
- try{var r=await fetch("/api/menu");var d=await r.json();MENU=d.menu;CFG=d;$("bn1").textContent=d.open=="0"?"🔴 Restaurant abhi band hai":(d.banner||"");$("bn2").textContent=d.open=="0"?"Thodi der baad order karein":(d.sub||"");if(!d.upi){var sel=$("pay");for(var k=sel.options.length-1;k>=0;k--)if(sel.options[k].text.indexOf("UPI")>=0)sel.remove(k)}$("title").textContent="🍔 "+d.name.toUpperCase();document.title=d.name+" – Order Online"}
+ try{var r=await fetch("/api/menu");var d=await r.json();MENU=d.menu;CFG=d;$("bn1").textContent=d.open=="0"?"🔴 Restaurant abhi band hai":(d.banner||"");$("bn2").textContent=d.open=="0"?"Thodi der baad order karein":(d.sub||"")+(d.eta?" • ⏱️ "+d.eta:"");if(!d.upi){var sel=$("pay");for(var k=sel.options.length-1;k>=0;k--)if(sel.options[k].text.indexOf("UPI")>=0)sel.remove(k)}$("title").textContent="🍔 "+d.name.toUpperCase();document.title=d.name+" – Order Online"}
  catch(e){$("list").innerHTML='<div class="card">Menu load nahi hua. Page refresh karein.</div>';return}
  CATS=["All"].concat(MENU.map(function(m){return m.c}).filter(function(x,i,a){return a.indexOf(x)==i}));chips();menu();watch();try{var pf=JSON.parse(localStorage.getItem("qb_prof"));if(pf){$("nm").value=pf.n;$("ph").value=pf.p;$("ad").value=pf.a}}catch(e){}gateInit();phChange()}
 function chips(){$("chips").innerHTML=CATS.map(function(c,i){return '<button class="chip'+(c==cat?" on":"")+'" data-i="'+i+'">'+esc(c)+'</button>'}).join("");

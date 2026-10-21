@@ -1,5 +1,5 @@
-import os, json, time, hmac, hashlib, base64, urllib.request, urllib.parse, urllib.error
-from datetime import datetime
+import os, json, threading, time, hmac, hashlib, base64, urllib.request, urllib.parse, urllib.error
+from datetime import datetime, timedelta
 from typing import List, Optional
 from fastapi import FastAPI, HTTPException, Header, Request
 from fastapi.responses import FileResponse
@@ -51,7 +51,7 @@ MENU = [
 
 STATUSES = ["Received", "Preparing", "On Way", "Delivered", "Cancelled"]
 DEFAULTS = {"name": RESTAURANT, "banner": "Garam Garam, Fast Delivery ⚡",
-            "sub": "Momos • Chowmein • Fries • Chilli Potato", "fee": str(DELIVERY_FEE),
+            "sub": "Momos • Chowmein • Fries • Chilli Potato", "eta": "30-40 min", "fee": str(DELIVERY_FEE),
             "free_above": str(FREE_DELIVERY_ABOVE), "min": str(MIN_ORDER), "upi": UPI_ID, "open": "1"}
 
 url = os.getenv("DATABASE_URL", "sqlite:///quick_bite.db")
@@ -206,6 +206,32 @@ def mc_check(vid, code):
         return True
     return False
 
+def tg_creds():
+    with Session() as s:
+        t = s.get(Setting, "tg_token"); c = s.get(Setting, "tg_chat")
+        return (t.v if t else ""), (c.v if c else "")
+def tg_send(text):
+    tok, chat = tg_creds()
+    if not tok or not chat:
+        return False
+    try:
+        req = urllib.request.Request("https://api.telegram.org/bot%s/sendMessage" % tok, method="POST",
+                                     data=json.dumps({"chat_id": chat, "text": text, "disable_web_page_preview": True}).encode(),
+                                     headers={"Content-Type": "application/json"})
+        with urllib.request.urlopen(req, timeout=10) as r:
+            return bool(json.loads(r.read().decode()).get("ok"))
+    except Exception:
+        return False
+def remind(oid, n):
+    with Session() as s:
+        o = s.get(Order, oid)
+        if not o or o.status != "Received":
+            return
+        text = "⚠️ Order #%d abhi tak accept nahi hua (%s, Rs %d). Jaldi dekhein!" % (o.id, o.name, int(o.total or 0))
+    tg_send(text)
+    if n < 3:
+        t = threading.Timer(120, remind, args=(oid, n + 1)); t.daemon = True; t.start()
+
 app = FastAPI(title=RESTAURANT)
 
 class Line(BaseModel):
@@ -239,8 +265,10 @@ class CouponIn(BaseModel):
     code: str; kind: str; value: float; min_order: float = 0
 class CouponCheck(BaseModel):
     code: str; subtotal: float
+class TgIn(BaseModel):
+    token: str
 class SettingsIn(BaseModel):
-    name: str; banner: str; sub: str; fee: float; free_above: float; min: float; upi: str; open: int
+    name: str; banner: str; sub: str; eta: str = ""; fee: float; free_above: float; min: float; upi: str; open: int
 
 def calc_coupon(s, code, subtotal):
     c = s.query(Coupon).filter(Coupon.code == code.strip().upper(), Coupon.active == 1).first()
@@ -259,7 +287,7 @@ def menu():
     with Session() as s:
         S = get_settings(s)
         dishes = s.query(Dish).order_by(Dish.id).all()
-        return {"name": S["name"], "banner": S["banner"], "sub": S["sub"], "open": S["open"],
+        return {"name": S["name"], "banner": S["banner"], "sub": S["sub"], "eta": S["eta"], "open": S["open"],
                 "fee": num(S["fee"]), "free_above": num(S["free_above"]), "min": num(S["min"]), "upi": S["upi"], "otp": OTP_ON,
                 "menu": [{"id": d.id, "n": d.name, "c": d.cat, "p": money(d.price), "e": d.emoji or "🍽️",
                           "v": d.veg, "d": d.descr or "", "a": d.avail,
@@ -357,7 +385,14 @@ def place(o: NewOrder):
                   lng=o.lng if o.lng is not None and -180 <= o.lng <= 180 else None,
                   coupon=code, discount=disc)
         s.add(r); s.commit()
-        return {"id": r.id, "total": total}
+        oid = r.id
+        mp = ("https://www.google.com/maps?q=%s,%s" % (r.lat, r.lng)) if r.lat is not None and r.lng is not None else \
+             ("https://www.google.com/maps/search/?api=1&query=" + urllib.parse.quote(r.address))
+        text = "🆕 NAYA ORDER #%d\n💰 Rs %d (%s)\n👤 %s · %s\n🍽️ %s\n📍 %s\n🗺️ %s" % (
+            oid, int(total), o.pay, r.name, phone, r.items, r.address, mp)
+    threading.Thread(target=tg_send, args=(text,), daemon=True).start()
+    t = threading.Timer(120, remind, args=(oid, 1)); t.daemon = True; t.start()
+    return {"id": oid, "total": total}
 
 @app.get("/api/order/{oid}")
 def track(oid: int, phone: str):
@@ -513,13 +548,13 @@ def o_settings(authorization: str = Header(None)):
     check_token(authorization)
     with Session() as s:
         S = get_settings(s)
-        return {"name": S["name"], "banner": S["banner"], "sub": S["sub"], "fee": num(S["fee"]),
+        return {"name": S["name"], "banner": S["banner"], "sub": S["sub"], "eta": S["eta"], "fee": num(S["fee"]),
                 "free_above": num(S["free_above"]), "min": num(S["min"]), "upi": S["upi"], "open": int(S["open"])}
 
 @app.post("/api/owner/settings")
 def o_settings_save(d: SettingsIn, authorization: str = Header(None)):
     check_token(authorization)
-    vals = {"name": d.name.strip()[:60] or RESTAURANT, "banner": d.banner.strip()[:80], "sub": d.sub.strip()[:120],
+    vals = {"name": d.name.strip()[:60] or RESTAURANT, "banner": d.banner.strip()[:80], "sub": d.sub.strip()[:120], "eta": d.eta.strip()[:30],
             "fee": str(int(max(d.fee, 0))), "free_above": str(int(max(d.free_above, 0))), "min": str(int(max(d.min, 0))),
             "upi": d.upi.strip()[:80], "open": "1" if d.open else "0"}
     with Session() as s:
@@ -531,6 +566,83 @@ def o_settings_save(d: SettingsIn, authorization: str = Header(None)):
                 s.add(Setting(k=k, v=v))
         s.commit()
     return {"ok": True}
+
+@app.get("/api/owner/telegram")
+def o_tg_status(authorization: str = Header(None)):
+    check_token(authorization)
+    tok, chat = tg_creds()
+    return {"connected": bool(tok and chat)}
+
+@app.post("/api/owner/telegram")
+def o_tg_connect(d: TgIn, authorization: str = Header(None)):
+    check_token(authorization)
+    tok = d.token.strip()
+    if ":" not in tok or len(tok) < 20:
+        raise HTTPException(400, "Bot token sahi nahi lag raha")
+    try:
+        with urllib.request.urlopen("https://api.telegram.org/bot%s/getUpdates" % tok, timeout=10) as r:
+            data = json.loads(r.read().decode())
+    except Exception:
+        raise HTTPException(400, "Token galat hai ya Telegram se connect nahi hua")
+    chat = None
+    for u in reversed(data.get("result", [])):
+        c = (u.get("message") or {}).get("chat") or {}
+        if c.get("id"):
+            chat = c["id"]; break
+    if not chat:
+        raise HTTPException(400, "Pehle Telegram mein apne bot ko kholke /start bhejein, phir dobara Connect dabayein")
+    with Session() as s:
+        for k, v in (("tg_token", tok), ("tg_chat", str(chat))):
+            r = s.get(Setting, k)
+            if r:
+                r.v = v
+            else:
+                s.add(Setting(k=k, v=v))
+        s.commit()
+    tg_send("✅ Quick Bite alerts chalu ho gaye! Ab har naye order par yahan message aayega.")
+    return {"ok": True}
+
+@app.post("/api/owner/telegram/test")
+def o_tg_test(authorization: str = Header(None)):
+    check_token(authorization)
+    if not tg_send("🔔 Test alert: Quick Bite se message aa raha hai."):
+        raise HTTPException(400, "Alert nahi gaya. Dobara Connect karke dekhein")
+    return {"ok": True}
+
+@app.post("/api/owner/telegram/off")
+def o_tg_off(authorization: str = Header(None)):
+    check_token(authorization)
+    with Session() as s:
+        for k in ("tg_token", "tg_chat"):
+            r = s.get(Setting, k)
+            if r:
+                s.delete(r)
+        s.commit()
+    return {"ok": True}
+
+@app.get("/api/owner/report")
+def o_report(authorization: str = Header(None)):
+    check_token(authorization)
+    with Session() as s:
+        rows = s.query(Order).filter(Order.created >= datetime.utcnow() - timedelta(days=30)).all()
+    days, top, cancelled = {}, {}, 0
+    for r in rows:
+        if r.status == "Cancelled":
+            cancelled += 1
+            continue
+        k = (r.created + timedelta(hours=5, minutes=30)).strftime("%Y-%m-%d")
+        d = days.setdefault(k, {"orders": 0, "revenue": 0})
+        d["orders"] += 1; d["revenue"] += int(r.total or 0)
+        for part in (r.items or "").split(", "):
+            if " x" in part:
+                name, q = part.rsplit(" x", 1)
+                try:
+                    top[name] = top.get(name, 0) + int(q)
+                except ValueError:
+                    pass
+    return {"today": (datetime.utcnow() + timedelta(hours=5, minutes=30)).strftime("%Y-%m-%d"),
+            "days": [dict(date=k, **v) for k, v in sorted(days.items(), reverse=True)],
+            "top": sorted(top.items(), key=lambda x: -x[1])[:8], "cancelled": cancelled}
 
 @app.get("/owner")
 def owner_page():

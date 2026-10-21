@@ -21,9 +21,9 @@ a{color:#ff6b81}.hide{display:none}
 
 <div id="app" class="hide">
 <header><h2>👑 Owner Panel</h2><div><button class="b" onclick="sound=true;beep();this.textContent='🔔 On'">🔔 Sound</button> <button class="b" onclick="logout()">Logout</button></div></header>
-<div class="tabs"><button class="b on" id="tb-orders" onclick="tab('orders')">📋 Orders</button><button class="b" id="tb-menu" onclick="tab('menu')">🍔 Menu</button><button class="b" id="tb-offers" onclick="tab('offers')">🎁 Offers</button><button class="b" id="tb-settings" onclick="tab('settings')">⚙️ Settings</button></div>
+<div class="tabs"><button class="b on" id="tb-orders" onclick="tab('orders')">📋 Orders</button><button class="b" id="tb-menu" onclick="tab('menu')">🍔 Menu</button><button class="b" id="tb-offers" onclick="tab('offers')">🎁 Offers</button><button class="b" id="tb-settings" onclick="tab('settings')">⚙️ Settings</button><button class="b" id="tb-report" onclick="tab('report')">📈 Report</button></div>
 
-<section id="p-orders"><div id="list"></div></section>
+<section id="p-orders"><div id="sum"></div><div class="tabs"><button class="b on" id="f-active" onclick="setF('active')">⏳ Chal rahe</button><button class="b" id="f-all" onclick="setF('all')">📋 Sab orders</button></div><div id="list"></div></section>
 
 <section id="p-menu" class="hide">
 <div class="card" style="border-left-color:#2ecc71"><b id="dfTitle">➕ Nayi Dish Add Karein</b>
@@ -47,15 +47,24 @@ a{color:#ff6b81}.hide{display:none}
 <button class="b" style="background:#2ecc71;width:100%" onclick="addCoupon()">➕ Coupon Banao</button></div>
 <div id="coupons"></div></section>
 
+<section id="p-report" class="hide"><div id="rep"></div></section>
+
 <section id="p-settings" class="hide"><div class="card" style="border-left-color:#f1c40f">
 <label>Restaurant ka naam</label><input id="sName">
 <label>Top banner (bada text)</label><input id="sBanner" placeholder="Aaj ka offer: 10% off!">
 <label>Banner ki neeche wali line</label><input id="sSub">
+<label>Delivery time (customer ko dikhega)</label><input id="sEta" placeholder="30-40 min">
 <div class="g2"><div><label>Delivery charge (₹)</label><input id="sFee" type="number" inputmode="numeric"></div><div><label>Free delivery kitne se upar (₹)</label><input id="sFree" type="number" inputmode="numeric"></div></div>
 <label>Minimum order (₹)</label><input id="sMin" type="number" inputmode="numeric">
 <label>Aapki UPI ID (Pay Now ke liye)</label><input id="sUpi" placeholder="9876543210@ybl">
 <label>Restaurant abhi</label><select id="sOpen"><option value="1">🟢 Open – orders le rahe hain</option><option value="0">🔴 Band – orders nahi</option></select>
-<button class="b" style="background:#f1c40f;color:#111;width:100%" onclick="saveSettings()">💾 Settings Save Karein</button></div></section>
+<button class="b" style="background:#f1c40f;color:#111;width:100%" onclick="saveSettings()">💾 Settings Save Karein</button></div>
+<div class="card" style="border-left-color:#25a7e0"><b>🔔 Phone par alert (Telegram) – owner page band ho tab bhi</b>
+<p class="muted" style="margin:6px 0">Har naye order par aapke phone par Telegram message aata hai (app band ho tab bhi). Accept na karo to 2-2 minute mein 3 baar yaad dilata hai.</p>
+<p class="muted">1) Telegram mein <b>@BotFather</b> kholo → <b>/newbot</b> bhejo → naam do → jo <b>token</b> mile wo yahan paste karo.<br>2) Apne naye bot ko Telegram mein kholo aur <b>/start</b> bhejo.<br>3) Neeche <b>Connect</b> dabao.</p>
+<input id="tgTok" placeholder="Bot token (123456:ABC...)" style="margin-top:8px">
+<div id="tgSt" class="muted" style="margin-bottom:8px"></div>
+<div class="acts"><button class="b" style="background:#25a7e0" onclick="tgConnect()">🔗 Connect</button><button class="b" style="background:#16a34a" onclick="tgTest()">🔔 Test</button><button class="b" style="background:#7f1d1d" onclick="tgOff()">Band karo</button></div></div></section>
 </div>
 
 <script>
@@ -68,21 +77,59 @@ async function api(p,b){var r=await fetch(p,{method:b?"POST":"GET",headers:{"Con
 async function doLogin(){var r=await fetch("/api/owner/login",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({password:$("pw").value})});
  var d=await r.json();if(!r.ok){$("err").textContent=d.detail||"Login nahi hua";return}tok=d.token;sessionStorage.setItem("qb_tok",tok);start()}
 function logout(){sessionStorage.removeItem("qb_tok");location.reload()}
-function tab(t){curTab=t;["orders","menu","offers","settings"].forEach(function(x){$("p-"+x).classList.toggle("hide",x!=t);$("tb-"+x).classList.toggle("on",x==t)});
- if(t=="menu")loadDishes();if(t=="offers")loadCoupons();if(t=="settings")loadSettings();if(t=="orders")load()}
+function tab(t){curTab=t;["orders","menu","offers","settings","report"].forEach(function(x){$("p-"+x).classList.toggle("hide",x!=t);$("tb-"+x).classList.toggle("on",x==t)});
+ if(t=="menu")loadDishes();if(t=="offers")loadCoupons();if(t=="settings")loadSettings();if(t=="report")loadReport();if(t=="orders")load()}
 
 /* ---------- ORDERS ---------- */
 function mapUrl(o){return o.lat!=null&&o.lng!=null?"https://www.google.com/maps?q="+o.lat+","+o.lng:"https://www.google.com/maps/search/?api=1&query="+encodeURIComponent(o.address)}
 function payTag(o){return o.pay=="Pay Now (UPI)"?(o.pay_status=="Paid"?" · ✅ PAID":o.pay_status=="Claimed"?" · ⏳ Customer ne bola pay kiya, check karo":" · ❌ UNPAID"):" · Delivery par cash lena"}
 function payBtn(o){return o.pay=="Pay Now (UPI)"&&o.pay_status!="Paid"?'<button class="b" style="background:#16a34a;width:100%;margin-top:8px" onclick="paid('+o.id+')">💰 Payment mil gaya</button>':''}
 async function paid(id){await api("/api/owner/paid",{id:id,status:"x"});load()}
-async function load(){var os=await api("/api/owner/orders");var ids=os.map(function(o){return o.id});
- if(seen!==null&&ids.some(function(i){return seen.indexOf(i)<0})&&sound)beep();seen=ids;
- $("list").innerHTML=os.map(function(o){var t=new Date(o.time).toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit"});
-  return '<div class="card'+(o.status=="Received"?" new":"")+'"><div class="row"><b>#'+o.id+' · '+t+'</b><b>₹'+o.total+'</b></div>'+
+var FILTER="active",LASTO=[],SHOP="Quick Bite";
+function setF(f){FILTER=f;$("f-active").classList.toggle("on",f=="active");$("f-all").classList.toggle("on",f=="all");render()}
+function sbtn(id,s,label,color){return '<button class="b" style="background:'+color+'" onclick="st('+id+',&quot;'+s+'&quot;)">'+label+'</button>'}
+function ago(ts){var m=Math.floor((Date.now()-new Date(ts))/60000);return m<1?"abhi":m<60?m+" min pehle":Math.floor(m/60)+" ghante pehle"}
+function waLink(o){var msg;
+ if(o.status=="On Way")msg="Namaste "+o.name+", aapka order #"+o.id+" raste mein hai, thodi der mein pahunch jayega. – "+SHOP;
+ else if(o.status=="Delivered")msg="Namaste "+o.name+", aapka order #"+o.id+" deliver ho gaya. Dhanyavaad! Phir order karein 🙏 – "+SHOP;
+ else msg="Namaste "+o.name+", aapka order #"+o.id+" (₹"+o.total+") mil gaya hai aur taiyar ho raha hai. – "+SHOP;
+ return "https://wa.me/91"+o.phone+"?text="+encodeURIComponent(msg)}
+function printSlip(id){var o=LASTO.filter(function(x){return x.id==id})[0];if(!o)return;
+ var w=window.open("","_blank","width=360,height=600");if(!w){alert("Popup allow karein");return}
+ w.document.write('<html><body style="font-family:monospace;font-size:14px;width:280px"><b style="font-size:18px">'+esc(SHOP)+'</b><br>Order #'+o.id+'<br>'+new Date(o.time).toLocaleString("en-IN")+'<hr>'+
+  esc(o.items).split(", ").join("<br>")+'<hr>Total: Rs '+o.total+'<br>'+esc(o.pay)+(o.coupon?'<br>Coupon: '+esc(o.coupon)+' (-Rs '+(o.discount||0)+')':'')+'<hr>'+esc(o.name)+'<br>'+esc(o.phone)+'<br>'+esc(o.address)+'</body></html>');
+ w.document.close();w.focus();w.print()}
+function card(o){var d=new Date(o.time),isToday=d.toDateString()==new Date().toDateString();
+ var t=isToday?d.toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit"}):d.toLocaleString("en-IN",{day:"2-digit",month:"short",hour:"2-digit",minute:"2-digit"});
+ var fin=o.status=="Delivered"||o.status=="Cancelled",late=o.status=="Received"&&(Date.now()-d)>600000;
+ return '<div class="card'+(o.status=="Received"?" new":"")+'"><div class="row"><b>#'+o.id+' · '+t+'</b><b>₹'+o.total+'</b></div>'+
+  (fin?'':'<div class="muted" style="color:'+(late?'#ff6b6b':'#aaa')+'">⏱️ '+ago(o.time)+(late?' – ⚠️ abhi tak shuru nahi kiya':'')+'</div>')+
   '<div><b>'+esc(o.name)+'</b> · <a href="tel:'+esc(o.phone)+'">'+esc(o.phone)+'</a></div><div class="muted">📍 '+esc(o.address)+'</div><div style="margin:6px 0"><a href="'+mapUrl(o)+'" target="_blank">🗺️ Google Maps mein kholo</a></div>'+
-  '<div class="items">'+esc(o.items)+(o.coupon?'<br><span style="color:#2ecc71">🎁 '+esc(o.coupon)+' (−₹'+(o.discount||0)+')</span>':'')+'<br><i class="muted">'+esc(o.pay)+payTag(o)+'</i></div><div>Status: <b style="color:#f1c40f">'+esc(o.status)+'</b></div>'+
-  payBtn(o)+'<div class="acts"><button class="b" style="background:#f39c12" onclick="st('+o.id+',\'Preparing\')">Cooking 🍳</button><button class="b" style="background:#3498db" onclick="st('+o.id+',\'On Way\')">On Way 🛵</button><button class="b" style="background:#2ecc71" onclick="st('+o.id+',\'Delivered\')">Done ✅</button><button class="b" style="background:#7f1d1d" onclick="if(confirm(\'Cancel order?\'))st('+o.id+',\'Cancelled\')">✕</button></div></div>'}).join("")||'<div class="card">Abhi koi order nahi.</div>'}
+  '<div class="items">'+esc(o.items)+(o.coupon?'<br><span style="color:#2ecc71">🎁 '+esc(o.coupon)+' (−₹'+(o.discount||0)+')</span>':'')+'<br><i class="muted">'+esc(o.pay)+payTag(o)+'</i></div>'+
+  '<div>Status: <b style="color:#f1c40f">'+esc(o.status)+'</b></div>'+payBtn(o)+
+  (fin?'':'<div class="acts">'+sbtn(o.id,"Preparing","Cooking 🍳","#f39c12")+sbtn(o.id,"On Way","On Way 🛵","#3498db")+sbtn(o.id,"Delivered","Done ✅","#2ecc71")+'<button class="b" style="background:#7f1d1d" onclick="if(confirm(&quot;Cancel order?&quot;))st('+o.id+',&quot;Cancelled&quot;)">✕</button></div>')+
+  '<div class="acts"><a class="b" style="text-align:center;text-decoration:none;background:#25d366" target="_blank" href="'+waLink(o)+'">💬 WhatsApp</a><button class="b" style="background:#555" onclick="printSlip('+o.id+')">🖨️ Slip</button></div></div>'}
+function render(){var os=LASTO,today=new Date().toDateString();
+ var tod=os.filter(function(o){return new Date(o.time).toDateString()==today&&o.status!="Cancelled"});
+ var rev=tod.reduce(function(a,o){return a+o.total},0);
+ var act=os.filter(function(o){return o.status!="Delivered"&&o.status!="Cancelled"});
+ var rec=os.filter(function(o){return o.status=="Received"}).length;
+ document.title=(rec?"("+rec+") Naya order! – ":"")+"Owner – Quick Bite";
+ $("sum").innerHTML='<div class="card" style="border-left-color:#2ecc71"><b>📊 Aaj:</b> '+tod.length+' orders · ₹'+rev+' &nbsp;|&nbsp; ⏳ Baaki: <b>'+act.length+'</b>'+(rec?' &nbsp;|&nbsp; 🆕 Naye: <b style="color:#f1c40f">'+rec+'</b>':'')+'</div>';
+ var list=FILTER=="active"?act:os;
+ $("list").innerHTML=list.map(card).join("")||'<div class="card">Koi order nahi.</div>'}
+async function load(){var os=await api("/api/owner/orders");
+ var ids=os.map(function(o){return o.id});
+ if(seen!==null&&ids.some(function(i){return seen.indexOf(i)<0})&&sound)beep();seen=ids;LASTO=os;render()}
+function sumOf(list){return list.reduce(function(a,d){return{o:a.o+d.orders,r:a.r+d.revenue}},{o:0,r:0})}
+async function loadReport(){var d=await api("/api/owner/report");
+ var c=new Date(d.today+"T00:00:00Z");c.setUTCDate(c.getUTCDate()-6);var cs=c.toISOString().slice(0,10);
+ var td=sumOf(d.days.filter(function(x){return x.date==d.today})),w7=sumOf(d.days.filter(function(x){return x.date>=cs})),m30=sumOf(d.days);
+ function box(t,x){return '<div class="card" style="border-left-color:#2ecc71"><div class="row"><b>'+t+'</b><b>₹'+x.r+'</b></div><div class="muted">'+x.o+' orders</div></div>'}
+ $("rep").innerHTML=box("📅 Aaj",td)+box("🗓️ Pichhle 7 din",w7)+box("📆 Pichhle 30 din",m30)+
+  '<div class="card" style="border-left-color:#f1c40f"><b>🔥 Sabse zyada bikne wali dishes (30 din)</b>'+(d.top.map(function(t,i){return '<div class="row"><span>'+(i+1)+'. '+esc(t[0])+'</span><b>'+t[1]+'</b></div>'}).join("")||'<div class="muted">Abhi data nahi</div>')+'</div>'+
+  '<div class="card"><b>📋 Din ke hisaab se</b>'+(d.days.slice(0,14).map(function(x){return '<div class="row"><span>'+x.date+'</span><span>'+x.orders+' orders · <b>₹'+x.revenue+'</b></span></div>'}).join("")||'<div class="muted">Abhi data nahi</div>')+'</div>'+
+  '<div class="card" style="border-left-color:#7f1d1d"><div class="row"><span>❌ Cancel hue (30 din)</span><b>'+d.cancelled+'</b></div></div>'}
 async function st(id,s){await api("/api/owner/status",{id:id,status:s});load()}
 
 /* ---------- MENU ---------- */
@@ -111,9 +158,13 @@ async function togCoupon(id){await api("/api/owner/coupon/toggle",{id:id});loadC
 async function delCoupon(id){if(confirm("Ye coupon delete karein?")){await api("/api/owner/coupon/delete",{id:id});loadCoupons()}}
 
 /* ---------- SETTINGS ---------- */
-async function loadSettings(){var s=await api("/api/owner/settings");$("sName").value=s.name;$("sBanner").value=s.banner;$("sSub").value=s.sub;$("sFee").value=s.fee;$("sFree").value=s.free_above;$("sMin").value=s.min;$("sUpi").value=s.upi;$("sOpen").value=s.open}
-async function saveSettings(){await api("/api/owner/settings",{name:$("sName").value,banner:$("sBanner").value,sub:$("sSub").value,fee:+$("sFee").value||0,free_above:+$("sFree").value||0,min:+$("sMin").value||0,upi:$("sUpi").value,open:+$("sOpen").value});alert("✅ Settings save ho gayi")}
+async function tgStatus(){try{var s=await api("/api/owner/telegram");$("tgSt").textContent=s.connected?"✅ Telegram alert chalu hai":"❌ Abhi connect nahi hai"}catch(e){}}
+async function tgConnect(){await api("/api/owner/telegram",{token:$("tgTok").value});$("tgTok").value="";alert("✅ Connect ho gaya! Telegram par ek message aaya hoga.");tgStatus()}
+async function tgTest(){await api("/api/owner/telegram/test",{});alert("Test message bhej diya. Telegram dekhein.")}
+async function tgOff(){if(confirm("Telegram alert band karein?")){await api("/api/owner/telegram/off",{});tgStatus()}}
+async function loadSettings(){tgStatus();var s=await api("/api/owner/settings");$("sName").value=s.name;$("sBanner").value=s.banner;$("sSub").value=s.sub;$("sEta").value=s.eta||"";$("sFee").value=s.fee;$("sFree").value=s.free_above;$("sMin").value=s.min;$("sUpi").value=s.upi;$("sOpen").value=s.open}
+async function saveSettings(){await api("/api/owner/settings",{name:$("sName").value,banner:$("sBanner").value,sub:$("sSub").value,eta:$("sEta").value,fee:+$("sFee").value||0,free_above:+$("sFree").value||0,min:+$("sMin").value||0,upi:$("sUpi").value,open:+$("sOpen").value});alert("✅ Settings save ho gayi")}
 
-function start(){$("login").classList.add("hide");$("app").classList.remove("hide");load();setInterval(function(){if(curTab=="orders")load()},8000)}
+function start(){$("login").classList.add("hide");$("app").classList.remove("hide");load();fetch("/api/menu").then(function(r){return r.json()}).then(function(d){SHOP=d.name}).catch(function(){});setInterval(load,8000);setInterval(function(){if(sound&&LASTO.some(function(o){return o.status=="Received"}))beep()},20000)}
 if(tok)start();
 </script></body></html>
